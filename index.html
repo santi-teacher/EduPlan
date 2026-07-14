@@ -1,0 +1,2462 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>EduPlan System</title>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- Font -->
+  <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  
+  <style>
+    body { font-family: 'Sarabun', sans-serif; }
+    
+    /* ซ่อน Scrollbar สำหรับตารางแต่ยังเลื่อนได้ */
+    .table-container {
+      width: 100%;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      scroll-behavior: smooth;
+    }
+    .table-container::-webkit-scrollbar { height: 6px; }
+    .table-container::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 4px; }
+    .table-container::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+    .table-container::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    
+    /* ป้องกัน UI ทับแถบ Home bar ของ iOS */
+    .pb-safe { padding-bottom: max(1rem, env(safe-area-inset-bottom)); }
+    .pt-safe { padding-top: max(0.5rem, env(safe-area-inset-top)); }
+    
+    /* ป้องกันการซูมหน้าจอเมื่อกดช่องกรอกข้อมูลใน iOS */
+    @media screen and (max-width: 767px) {
+      input, select, textarea { font-size: 16px !important; }
+    }
+
+    table { page-break-inside: auto; width: 100%; }
+    .min-w-table { min-width: 800px; }
+    
+    tr { page-break-inside: avoid; page-break-after: auto; }
+    thead { display: table-header-group; }
+    tfoot { display: table-footer-group; }
+
+    .page-break-avoid {
+      page-break-inside: avoid !important;
+      break-inside: avoid !important;
+    }
+
+    @media print {
+      @page { size: A4 portrait; margin: 10mm; }
+      * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+      html, body { background-color: #ffffff !important; }
+      .no-print { display: none !important; }
+      .print-full-width { width: 100% !important; margin: 0 !important; max-width: none !important; }
+    }
+  </style>
+
+  <!-- Babel & html2pdf -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+</head>
+<body class="bg-gray-50">
+
+  <div id="root"></div>
+
+  <script type="text/babel" data-type="module">
+    import React, { useState, useEffect } from 'https://esm.sh/react@18.2.0';
+    import { createRoot } from 'https://esm.sh/react-dom@18.2.0/client';
+    import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, LabelList } from 'https://esm.sh/recharts@2.12.0?deps=react@18.2.0,react-dom@18.2.0';
+    import { Wallet, FileText, CheckCircle, AlertCircle, PlusCircle, LayoutDashboard, ListOrdered, Edit, Trash2, Check, X, Lock, Unlock, KeyRound, PieChart as PieChartIcon, Settings, Tags, Loader2, Menu, RefreshCcw, TrendingUp, Download, Printer, ImageOff, ShieldAlert, FolderPlus, FolderOpen, BarChart3, Home, ChevronRight } from 'https://esm.sh/lucide-react@0.344.0?deps=react@18.2.0';
+
+    const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#ffc658', '#ff7300'];
+
+    // ====================================================
+    // นำ Web App URL ที่ได้จาก Google Apps Script มาใส่ที่นี่
+    // ====================================================
+    const GAS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbynj3tV-SjuwQMItvDR-XKp4o1XQDLPF5PtkH4Y7Xu8tCpkguQj_i1Typ9KefiBSlQ/exec'; // <--- แทนที่ข้อความนี้ด้วย URL ของคุณ
+    
+    const api = {
+      call: (functionName, ...args) => {
+        return new Promise((resolve, reject) => {
+          if (typeof google !== 'undefined' && google.script && google.script.run) {
+            google.script.run
+              .withSuccessHandler(resolve)
+              .withFailureHandler(reject)
+              [functionName](...args);
+          } else {
+            console.warn(`[Local Mock] Called GAS function: ${functionName}`, args);
+            setTimeout(() => {
+              if (functionName === 'getInitialData') {
+                resolve(JSON.stringify({ 
+                  activities: [
+                    { id: 1, name: 'กิจกรรมเปิดบ้าน', allocatedBudget: 50000, moneyType: 'เงินอุดหนุน ค่ากิจกรรมพัฒนาฯ', responsible: 'นายสมชาย', status: 'กำลังดำเนินการ', projectId: 'default', projectResponsible: 'ระบุชื่อ', managementGroup: 'บริหารวิชาการ', plan: 'ระบุแผนงาน' },
+                    { id: 2, name: 'ปรับปรุงห้องสมุด', allocatedBudget: 120000, moneyType: 'เงินอุดหนุน ค่าจัดการเรียนการสอน', responsible: 'นางสมศรี', status: 'ยังไม่เริ่มต้น', projectId: 'default', projectResponsible: 'ระบุชื่อ', managementGroup: 'บริหารวิชาการ', plan: 'ระบุแผนงาน' },
+                    { id: 3, name: 'ค่าน้ำประปา', allocatedBudget: 50000, moneyType: 'รายได้สถานศึกษา', responsible: 'การเงิน', status: 'กำลังดำเนินการ', projectId: 'reg1', projectResponsible: 'การเงิน', managementGroup: 'บริหารงบประมาณ', plan: 'รายจ่ายประจำ' }
+                  ], 
+                  expenses: [
+                    { id: 101, activityId: 1, activityName: 'กิจกรรมเปิดบ้าน', date: '2026-04-05', type: 'จัดซื้อ', details: 'ค่าวัสดุอุปกรณ์', amount: 15000, projectId: 'default', projectResponsible: 'ระบุชื่อ', managementGroup: 'บริหารวิชาการ', plan: 'ระบุแผนงาน' },
+                    { id: 102, activityId: 3, activityName: 'ค่าน้ำประปา', date: '2026-04-10', type: 'จัดซื้อ', details: 'บิลเดือนเมษา', amount: 4500, projectId: 'reg1', projectResponsible: 'การเงิน', managementGroup: 'บริหารงบประมาณ', plan: 'รายจ่ายประจำ' }
+                  ], 
+                  config: {
+                    adminPassword: 'admin',
+                    schoolName: '',
+                    appModes: [
+                      { id: 'NORMAL', name: 'แผนงาน/โครงการ' },
+                      { id: 'REGULAR', name: 'รายจ่ายประจำ' }
+                    ],
+                    moneyTypes: ['เงินอุดหนุน ค่าจัดการเรียนการสอน', 'เงินอุดหนุน ค่ากิจกรรมพัฒนาฯ', 'รายได้สถานศึกษา', 'สอร.', 'ลูกเสือ'],
+                    expenseTypes: ['จัดซื้อ', 'จัดจ้าง', 'อื่นๆ', 'โยกเงิน'],
+                    statusTypes: ['ยังไม่เริ่มต้น', 'อยู่ระหว่างดำเนินการ', 'กำลังดำเนินการ', 'ดำเนินการสำเร็จ'],
+                    projects: [
+                      { id: 'default', projectName: '(2569) โครงการตัวอย่าง', managementGroup: 'บริหารวิชาการ', responsible: 'ระบุชื่อ', plan: 'ระบุแผนงาน', strategy: 'ระบุกลยุทธ์', logoUrl: '', projectType: 'NORMAL' },
+                      { id: 'reg1', projectName: 'ค่าสาธารณูปโภค', managementGroup: 'บริหารงบประมาณ', responsible: 'การเงิน', plan: 'รายจ่ายประจำ', strategy: '-', logoUrl: '', projectType: 'REGULAR' }
+                    ]
+                  } 
+                }));
+              } else {
+                resolve(true);
+              }
+            }, 500);
+          }
+        });
+      }
+    };
+
+    function App() {
+      const [isInitializing, setIsInitializing] = useState(true);
+      const [isSaving, setIsSaving] = useState(false);
+      const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+      const [toastMessage, setToastMessage] = useState('');
+      const [activeTab, setActiveTab] = useState('dashboard'); 
+      const [appMode, setAppMode] = useState('NORMAL');
+      
+      const [appModes, setAppModes] = useState([
+        { id: 'NORMAL', name: '' },
+        { id: 'REGULAR', name: '' }
+      ]);
+      const currentModeName = appModes.find(m => m.id === appMode)?.name || 'รายการ';
+      const [editingMode, setEditingMode] = useState(null); // สำหรับ UI แก้ไขชื่อโหมด
+      
+      // Data State
+      const [allActivities, setAllActivities] = useState([]);
+      const [allExpenses, setAllExpenses] = useState([]);
+      
+      // Multi-Project State
+      const [projects, setProjects] = useState([]);
+      const [selectedProjectId, setSelectedProjectId] = useState('');
+      const [selectedGroupFilter, setSelectedGroupFilter] = useState('ALL');
+      
+      const [moneyTypes, setMoneyTypes] = useState([]);
+      const [expenseTypes, setExpenseTypes] = useState([]);
+      const [statusTypes, setStatusTypes] = useState([]);
+      const [themeColors, setThemeColors] = useState({ primary: '#16a34a', chartExpense: '#ec4899', chartRemaining: '#10b981' });
+      const [adminPassword, setAdminPassword] = useState('admin999');
+      const [schoolName, setSchoolName] = useState('');
+
+      // 1. กรอง Project ตาม Mode ปัจจุบัน (รองรับความเข้ากันได้กับ ID เก่า)
+      const currentModeProjects = projects.filter(p => p.projectType === appMode || (!p.projectType && appMode === 'NORMAL'));
+      const validProjectNames = currentModeProjects.map(p => p.projectName);
+      const validProjectIds = currentModeProjects.map(p => p.id);
+
+      // 2. จัดการ selectedProjectId เมื่อสลับ Mode
+      useEffect(() => {
+        if (!isInitializing) {
+          if (currentModeProjects.length > 0 && !currentModeProjects.find(p => p.id === selectedProjectId)) {
+            setSelectedProjectId(currentModeProjects[0].id);
+            setSelectedGroupFilter('ALL');
+          } else if (currentModeProjects.length === 0) {
+            setSelectedProjectId('');
+          }
+        }
+      }, [appMode, projects, isInitializing]);
+
+      // Filtered data for the active project
+      const activeProject = currentModeProjects.find(p => p.id === selectedProjectId) || null;
+      const activities = activeProject ? allActivities.filter(a => a.projectId === activeProject.projectName || a.projectId === activeProject.id || (!a.projectId && activeProject.id === 'default')) : [];
+      const expenses = activeProject ? allExpenses.filter(e => e.projectId === activeProject.projectName || e.projectId === selectedProjectId || (!e.projectId && selectedProjectId === projects[0]?.id)) : [];
+
+      // Filtered data for the Entire Mode (For Global Dashboard)
+      const modeActivities = allActivities.filter(a => {
+        if (!a.projectId && appMode === 'NORMAL') return true;
+        return validProjectNames.includes(a.projectId) || validProjectIds.includes(a.projectId);
+      });
+      const modeExpenses = allExpenses.filter(e => {
+        if (!e.projectId && appMode === 'NORMAL') return true;
+        return validProjectNames.includes(e.projectId) || validProjectIds.includes(e.projectId);
+      });
+
+      const [settingsModal, setSettingsModal] = useState({ 
+        isOpen: false, 
+        activeTab: 'project-edit',
+        editProjectData: {}, 
+        newProjectData: { projectName: '', managementGroup: '', responsible: '', plan: '', strategy: '', logoUrl: '' },
+        colors: {}, 
+        password: '',
+        schoolName: '',
+        typeTab: 'money'
+      });
+      const [newTypeInput, setNewTypeInput] = useState('');
+      
+      const [isAdmin, setIsAdmin] = useState(false);
+      const [authModal, setAuthModal] = useState({ isOpen: false, password: '', error: '' });
+      const [confirmModal, setConfirmModal] = useState({ isOpen: false, title: '', message: '', onConfirm: null });
+      const [statusDetailModal, setStatusDetailModal] = useState({ isOpen: false, status: '', activities: [] });
+
+      const showToast = (msg) => { setToastMessage(msg); };
+
+      useEffect(() => {
+        if (toastMessage) {
+          const timer = setTimeout(() => setToastMessage(''), 3500);
+          return () => clearTimeout(timer);
+        }
+      }, [toastMessage]);
+
+      useEffect(() => {
+        const handleResize = () => {
+          if (window.innerWidth < 1024) { setIsSidebarOpen(false); } 
+          else { setIsSidebarOpen(true); }
+        };
+        handleResize();
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+      }, []);
+
+      useEffect(() => {
+        const fetchData = async () => {
+          try {
+            const resultString = await api.call('getInitialData');
+            const data = JSON.parse(resultString);
+            
+            if (data.activities && data.activities.length > 0) setAllActivities(data.activities);
+            if (data.expenses && data.expenses.length > 0) setAllExpenses(data.expenses);
+            
+            if (data.config) {
+              if (data.config.appModes) setAppModes(data.config.appModes);
+              if (data.config.moneyTypes) setMoneyTypes(data.config.moneyTypes);
+              if (data.config.expenseTypes) setExpenseTypes(data.config.expenseTypes);
+              if (data.config.statusTypes) setStatusTypes(data.config.statusTypes);
+              if (data.config.themeColors) setThemeColors(data.config.themeColors);
+              if (data.config.adminPassword) setAdminPassword(data.config.adminPassword);
+              if (data.config.schoolName !== undefined) setSchoolName(data.config.schoolName);
+              
+              if (data.config.projects && data.config.projects.length > 0) {
+                setProjects(data.config.projects);
+              } else if (data.config.projectInfo) {
+                const defaultProj = { id: 'default', ...data.config.projectInfo, managementGroup: '', projectType: 'NORMAL' };
+                setProjects([defaultProj]);
+              } else {
+                const defaultProj = { id: 'default', projectName: 'โครงการเริ่มต้น', managementGroup: '', responsible: '', plan: '', strategy: '', logoUrl: '', projectType: 'NORMAL' };
+                setProjects([defaultProj]);
+              }
+            }
+          } catch (error) {
+            console.error("Error fetching data:", error);
+            showToast("ไม่สามารถดึงข้อมูลจากฐานข้อมูลได้ (โปรดตรวจสอบ URL ของ GAS)");
+          } finally {
+            setIsInitializing(false);
+          }
+        };
+        fetchData();
+      }, []);
+
+      const formatCurrency = (amount) => new Intl.NumberFormat('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount);
+      const formatDate = (dateInput) => {
+        if (!dateInput) return '-';
+        const d = new Date(dateInput);
+        if (isNaN(d.getTime())) return dateInput;
+        const day = String(d.getDate()).padStart(2, '0');
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const year = d.getFullYear() + 543;
+        return `${day}/${month}/${year}`;
+      };
+
+      const uniqueActivityNames = [...new Set(activities.map(a => a.name))];
+      const uniqueResponsibles = [...new Set(activities.map(a => a.responsible).filter(Boolean))];
+
+      const uniqueGroups = [...new Set(currentModeProjects.map(p => p.managementGroup || 'ไม่ระบุกลุ่มบริหาร'))];
+      const filteredProjectsDropdown = selectedGroupFilter === 'ALL'
+        ? currentModeProjects
+        : currentModeProjects.filter(p => (p.managementGroup || 'ไม่ระบุกลุ่มบริหาร') === selectedGroupFilter);
+
+      const handleGroupFilterChange = (e) => {
+        const newGroup = e.target.value;
+        setSelectedGroupFilter(newGroup);
+        const availableProjs = newGroup === 'ALL'
+          ? currentModeProjects
+          : currentModeProjects.filter(p => (p.managementGroup || 'ไม่ระบุกลุ่มบริหาร') === newGroup);
+
+        if (availableProjs.length > 0 && !availableProjs.find(p => p.id === selectedProjectId)) {
+           setSelectedProjectId(availableProjs[0].id);
+        }
+      };
+
+      const handleLogin = () => {
+        if (authModal.password === adminPassword || authModal.password === 'admin999') { 
+          setIsAdmin(true);
+          setAuthModal({ isOpen: false, password: '', error: '' });
+          showToast("เข้าสู่ระบบผู้ดูแลสำเร็จ");
+        } else {
+          setAuthModal({ ...authModal, error: 'รหัสผ่านไม่ถูกต้อง กรุณาลองใหม่อีกครั้ง' });
+        }
+      };
+
+      const handleSidebarMenuClick = (tabId) => {
+        setActiveTab(tabId);
+        if (window.innerWidth < 1024) {
+          setIsSidebarOpen(false);
+        }
+      };
+
+      const AppLogo = ({ className, size = 24 }) => {
+        if (activeProject && activeProject.logoUrl) {
+          return (
+            <img 
+              src={activeProject.logoUrl} 
+              alt="Logo" 
+              className={`object-contain ${className}`}
+              style={{ maxHeight: size * 1.5, maxWidth: size * 1.5 }}
+              onError={(e) => { e.target.style.display = 'none'; }} 
+            />
+          );
+        }
+        return <Wallet size={size} className={`shrink-0 ${className}`} />;
+      };
+
+      // Component สำหรับแสดงหน้าเมื่อไม่มีโครงการในโหมดนั้น
+      const EmptyStateView = () => (
+        <div className="flex flex-col items-center justify-center py-20 px-4 text-center bg-white rounded-2xl border border-gray-100 shadow-sm mt-4 animate-in fade-in">
+          <FolderPlus size={64} className="text-gray-300 mb-4" />
+          <h2 className="text-xl md:text-2xl font-bold text-gray-700 mb-2">ยังไม่มีข้อมูลในหมวด {currentModeName}</h2>
+          <p className="text-gray-500 mb-8 font-medium">กรุณาสร้างรายการใหม่เพื่อเริ่มบันทึกข้อมูล</p>
+          {isAdmin ? (
+            <button 
+              onClick={() => setSettingsModal({ 
+                isOpen: true, 
+                editProjectData: {}, 
+                newProjectData: { projectName: '', managementGroup: '', responsible: '', plan: '', strategy: '', logoUrl: '' },
+                colors: { ...themeColors }, 
+                password: adminPassword, 
+                schoolName: schoolName,
+                activeTab: 'project-new', 
+                typeTab: 'money' 
+              })} 
+              className="bg-blue-600 text-white px-6 py-3.5 rounded-xl font-bold hover:bg-blue-700 shadow-md flex items-center gap-2 active:scale-95 transition-all"
+            >
+              <PlusCircle size={20} /> สร้างรายการใหม่
+            </button>
+          ) : (
+            <div className="text-sm text-gray-400 bg-gray-50 px-4 py-2 rounded-lg border border-gray-100">
+              กรุณาเข้าสู่ระบบ Admin เพื่อสร้างข้อมูลใหม่
+            </div>
+          )}
+        </div>
+      );
+
+      // ==========================================
+      // VIEW 0: Global Dashboard
+      // ==========================================
+      const GlobalDashboardView = () => {
+        const totalProjects = currentModeProjects.length;
+        const globalIncome = modeActivities.reduce((sum, a) => sum + Number(a.allocatedBudget), 0);
+        const globalExpense = modeExpenses.reduce((sum, e) => sum + Number(e.amount), 0);
+        const globalBalance = globalIncome - globalExpense;
+
+        const globalExpensePercent = globalIncome > 0 ? ((globalExpense / globalIncome) * 100).toFixed(1) : 0;
+        const globalBalancePercent = globalIncome > 0 ? ((globalBalance / globalIncome) * 100).toFixed(1) : 0;
+        
+        const globalChartData = [
+          { name: 'ใช้ไป', value: globalExpense },
+          { name: 'คงเหลือ', value: globalBalance > 0 ? globalBalance : 0 }
+        ];
+
+        // หากิจกรรมที่ไม่ซ้ำชื่อกันสำหรับแสดงในกล่องสถานะ
+        const uniqueModeActivitiesList = [];
+        const seenModeNames = new Set();
+        modeActivities.forEach(act => {
+          if (!seenModeNames.has(act.name)) {
+            seenModeNames.add(act.name);
+            uniqueModeActivitiesList.push(act);
+          }
+        });
+
+        const inProgressCount = uniqueModeActivitiesList.filter(a => a.status === 'อยู่ระหว่างดำเนินการ' || a.status === 'กำลังดำเนินการ').length;
+        const completedCount = uniqueModeActivitiesList.filter(a => a.status === 'ดำเนินการสำเร็จ' || a.status === 'เสร็จสิ้น').length;
+        const totalActCount = uniqueModeActivitiesList.length;
+
+        const projectCompareData = currentModeProjects.map(p => {
+          const pActs = modeActivities.filter(a => a.projectId === p.projectName || a.projectId === p.id || (!a.projectId && p.id === 'default'));
+          const pExps = modeExpenses.filter(e => e.projectId === p.projectName || e.projectId === p.id || (!e.projectId && p.id === 'default'));
+          const income = pActs.reduce((sum, a) => sum + Number(a.allocatedBudget), 0);
+          const expense = pExps.reduce((sum, e) => sum + Number(e.amount), 0);
+          const percent = income > 0 ? ((expense / income) * 100).toFixed(1) : 0;
+          return { name: p.projectName, 'งบประมาณ': income, 'ใช้ไป': expense, 'คงเหลือ': income - expense, 'percentLabel': percent > 0 ? `${percent}%` : '' };
+        });
+
+        const projGroupMap = {};
+        currentModeProjects.forEach(p => { 
+          projGroupMap[p.id] = p.managementGroup || 'ไม่ระบุกลุ่มบริหาร'; 
+          projGroupMap[p.projectName] = p.managementGroup || 'ไม่ระบุกลุ่มบริหาร'; 
+        });
+
+        const allGroups = [...new Set(currentModeProjects.map(p => p.managementGroup || 'ไม่ระบุกลุ่มบริหาร'))];
+        const groupCompareData = allGroups.map(group => {
+          const gActs = modeActivities.filter(a => (projGroupMap[a.projectId || 'default'] || 'ไม่ระบุกลุ่มบริหาร') === group);
+          const gActIds = gActs.map(a => a.id);
+          const gExps = modeExpenses.filter(e => gActIds.includes(e.activityId));
+          const income = gActs.reduce((sum, a) => sum + Number(a.allocatedBudget), 0);
+          const expense = gExps.reduce((sum, e) => sum + Number(e.amount), 0);
+          const percent = income > 0 ? ((expense / income) * 100).toFixed(1) : 0;
+          const projectCount = currentModeProjects.filter(p => (p.managementGroup || 'ไม่ระบุกลุ่มบริหาร') === group).length;
+          return { name: group, 'งบประมาณ': income, 'ใช้ไป': expense, 'คงเหลือ': income - expense, 'percentLabel': percent > 0 ? `${percent}%` : '', projectCount };
+        }).filter(d => d['งบประมาณ'] > 0 || d['ใช้ไป'] > 0);
+
+        const allMoneyTypes = [...new Set(modeActivities.map(a => a.moneyType))];
+        const moneyTypeCompareData = allMoneyTypes.map(type => {
+          const mActs = modeActivities.filter(a => a.moneyType === type);
+          const mActIds = mActs.map(a => a.id);
+          const mExps = modeExpenses.filter(e => mActIds.includes(e.activityId));
+          const income = mActs.reduce((sum, a) => sum + Number(a.allocatedBudget), 0);
+          const expense = mExps.reduce((sum, e) => sum + Number(e.amount), 0);
+          const percent = income > 0 ? ((expense / income) * 100).toFixed(1) : 0;
+          return { name: type, 'งบประมาณ': income, 'ใช้ไป': expense, 'คงเหลือ': income - expense, 'percentLabel': percent > 0 ? `${percent}%` : '' };
+        }).filter(d => d['งบประมาณ'] > 0 || d['ใช้ไป'] > 0);
+
+        return (
+          <div className="space-y-4 md:space-y-6 animate-in fade-in duration-300">
+            <div className="flex items-center justify-between mb-2 md:mb-4 mt-2 gap-2 flex-wrap">
+              <h2 className="text-xl md:text-2xl font-bold text-indigo-700 flex items-center gap-2">
+                <BarChart3 size={28} className="md:w-8 md:h-8" /> แดชบอร์ดภาพรวม ({currentModeName})
+              </h2>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-4 md:mb-6">
+              <div className="bg-white rounded-2xl md:rounded-xl shadow-sm p-5 border-l-[5px] border-indigo-500 transition-transform active:scale-[0.98] md:active:scale-100 hover:-translate-y-1">
+                <div className="text-sm font-bold text-gray-500 mb-1">จำนวนรายการทั้งหมด</div>
+                <div className="text-3xl font-black text-indigo-600">{totalProjects}</div>
+              </div>
+              <div className="bg-white rounded-2xl md:rounded-xl shadow-sm p-5 border-l-[5px] border-blue-500 transition-transform active:scale-[0.98] md:active:scale-100 hover:-translate-y-1">
+                <div className="text-sm font-bold text-gray-500 mb-1">งบประมาณรวม (บาท)</div>
+                <div className="text-3xl font-black text-blue-600 truncate" title={formatCurrency(globalIncome)}>{formatCurrency(globalIncome)}</div>
+              </div>
+              <div className="bg-white rounded-2xl md:rounded-xl shadow-sm p-5 border-l-[5px] border-pink-500 transition-transform active:scale-[0.98] md:active:scale-100 hover:-translate-y-1">
+                <div className="text-sm font-bold text-gray-500 mb-1">เบิกจ่ายรวม (บาท)</div>
+                <div className="flex items-baseline gap-2 truncate">
+                  <div className="text-3xl font-black text-pink-500" title={formatCurrency(globalExpense)}>{formatCurrency(globalExpense)}</div>
+                  <div className="text-sm font-bold text-pink-400 mb-1 bg-pink-50 px-2 py-0.5 rounded-full">({globalExpensePercent}%)</div>
+                </div>
+              </div>
+              <div className="bg-white rounded-2xl md:rounded-xl shadow-sm p-5 border-l-[5px] border-emerald-500 transition-transform active:scale-[0.98] md:active:scale-100 hover:-translate-y-1">
+                <div className="text-sm font-bold text-gray-500 mb-1">คงเหลือรวม (บาท)</div>
+                <div className="flex items-baseline gap-2 truncate">
+                  <div className="text-3xl font-black text-emerald-600" title={formatCurrency(globalBalance)}>{formatCurrency(globalBalance)}</div>
+                  <div className="text-sm font-bold text-emerald-500 mb-1 bg-emerald-50 px-2 py-0.5 rounded-full">({globalBalancePercent}%)</div>
+                </div>
+              </div>
+            </div>
+
+            {totalProjects > 0 && (
+              <>
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6 mb-4 md:mb-6">
+                  <div className="bg-white rounded-2xl md:rounded-xl shadow-sm p-4 md:p-5 border border-gray-100 lg:col-span-2 overflow-x-auto">
+                    <h3 className="text-base md:text-lg font-bold text-gray-700 mb-4 border-b pb-2 whitespace-nowrap">เปรียบเทียบงบประมาณ vs การเบิกจ่าย (แยกตามรายการ)</h3>
+                    <div className="h-[300px] w-full overflow-hidden">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={projectCompareData} margin={{ top: 25, right: 10, left: 20, bottom: 5 }}>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                          <XAxis dataKey="name" tick={{fontSize: 11}} interval={0} angle={-45} textAnchor="end" height={70} tickFormatter={(value) => typeof value === 'string' && value.length > 15 ? value.substring(0, 15) + '...' : value} />
+                          <YAxis tickFormatter={(value) => new Intl.NumberFormat('th-TH', { notation: "compact", compactDisplay: "short" }).format(value)} tick={{fontSize: 11}} />
+                          <Tooltip content={({ active, payload, label }) => {
+                            if (active && payload && payload.length) {
+                              const data = payload[0].payload;
+                              return (
+                                <div className="bg-white p-3 border border-gray-200 shadow-lg rounded-lg text-sm z-50">
+                                  <p className="font-bold text-gray-800 mb-2 border-b pb-1">{data.name}</p>
+                                  <p className="text-xs font-bold mb-1 text-gray-700">งบประมาณรวม: {formatCurrency(data['งบประมาณ'])} ฿</p>
+                                  {payload.map((entry, index) => (
+                                    <p key={index} className="text-xs font-medium mb-0.5" style={{ color: entry.color }}>
+                                      {entry.name}: {formatCurrency(entry.value)} ฿
+                                    </p>
+                                  ))}
+                                </div>
+                              );
+                            } return null;
+                          }}/>
+                          <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }} />
+                          <Bar dataKey="งบประมาณ" fill={themeColors.primary} radius={[4, 4, 0, 0]} />
+                          <Bar dataKey="ใช้ไป" fill={themeColors.chartExpense} radius={[4, 4, 0, 0]}>
+                            <LabelList dataKey="percentLabel" position="top" style={{ fontSize: '10px', fill: '#4b5563', fontWeight: 'bold' }} />
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+                  <div className="space-y-4 md:space-y-6">
+                    <div className="bg-white rounded-2xl md:rounded-xl shadow-sm p-4 md:p-5 border border-gray-100">
+                      <h3 className="text-base md:text-lg font-bold text-gray-700 mb-2 border-b pb-2">สัดส่วนการใช้งบประมาณ</h3>
+                      <div className="h-[180px] w-full flex items-center justify-center">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <PieChart>
+                            <Pie data={globalChartData} cx="50%" cy="50%" innerRadius={35} outerRadius={65} dataKey="value" label={({percent}) => `${(percent * 100).toFixed(1)}%`}>
+                              <Cell fill={themeColors.chartExpense} />
+                              <Cell fill={themeColors.chartRemaining} />
+                            </Pie>
+                            <Tooltip formatter={(val) => formatCurrency(val) + ' ฿'} />
+                            <Legend verticalAlign="bottom" height={24} wrapperStyle={{ fontSize: '12px' }}/>
+                          </PieChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+                    <div className="bg-white rounded-2xl md:rounded-xl shadow-sm p-4 md:p-5 border border-gray-100 flex-1 flex flex-col justify-center">
+                      <h3 className="text-base md:text-lg font-bold text-gray-700 mb-3 border-b pb-2">สถานะกิจกรรมรวม</h3>
+                      <div className="flex flex-col gap-2">
+                        <div className="p-3 md:p-2.5 bg-gray-50 rounded-xl md:rounded-lg border border-gray-100 flex justify-between items-center">
+                          <span className="font-semibold text-sm text-gray-600">กิจกรรมทั้งหมด</span>
+                          <span className="text-base font-bold">{totalActCount}</span>
+                        </div>
+                        <div className="p-3 md:p-2.5 bg-blue-50 rounded-xl md:rounded-lg border border-blue-100 flex justify-between items-center text-blue-800">
+                          <span className="font-semibold text-sm">กำลังดำเนินการ</span>
+                          <span className="text-base font-bold">{inProgressCount}</span>
+                        </div>
+                        <div className="p-3 md:p-2.5 bg-green-50 rounded-xl md:rounded-lg border border-green-100 flex justify-between items-center text-green-800">
+                          <span className="font-semibold text-sm">เสร็จสิ้นแล้ว</span>
+                          <span className="text-base font-bold">{completedCount}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
+                   <div className="bg-white rounded-2xl md:rounded-xl shadow-sm p-4 md:p-5 border border-gray-100 overflow-x-auto">
+                     <h3 className="text-base md:text-lg font-bold text-gray-700 mb-4 border-b pb-2 whitespace-nowrap">สรุปแยกตามกลุ่มบริหาร</h3>
+                     <div className="h-[300px] w-full overflow-hidden">
+                       <ResponsiveContainer width="100%" height="100%">
+                         <BarChart data={groupCompareData} margin={{ top: 25, right: 10, left: 10, bottom: 5 }}>
+                           <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                           <XAxis dataKey="name" tick={{fontSize: 11}} interval={0} angle={-45} textAnchor="end" height={70} tickFormatter={(value) => typeof value === 'string' && value.length > 15 ? value.substring(0, 15) + '...' : value} />
+                           <YAxis tickFormatter={(value) => new Intl.NumberFormat('th-TH', { notation: "compact", compactDisplay: "short" }).format(value)} tick={{fontSize: 11}} />
+                           <Tooltip content={({ active, payload, label }) => {
+                             if (active && payload && payload.length) {
+                               const data = payload[0].payload;
+                               return (
+                                 <div className="bg-white p-3 border border-gray-200 shadow-lg rounded-lg text-sm z-50">
+                                   <p className="font-bold text-gray-800 mb-2 border-b pb-1">{data.name}</p>
+                                   <p className="text-gray-600 mb-1.5 text-xs">จำนวน: <span className="font-bold text-indigo-600">{data.projectCount} รายการ</span></p>
+                                   <p className="text-xs font-bold mb-1 text-gray-700">งบประมาณรวม: {formatCurrency(data['งบประมาณ'])} ฿</p>
+                                   {payload.map((entry, index) => (
+                                     <p key={index} className="text-xs font-medium mb-0.5" style={{ color: entry.color }}>
+                                       {entry.name}: {formatCurrency(entry.value)} ฿
+                                     </p>
+                                   ))}
+                                 </div>
+                               );
+                             } return null;
+                           }}/>
+                           <Legend wrapperStyle={{ fontSize: '12px' }}/>
+                           <Bar dataKey="งบประมาณ" fill="#8b5cf6" radius={[4, 4, 0, 0]} />
+                           <Bar dataKey="ใช้ไป" fill="#f43f5e" radius={[4, 4, 0, 0]}>
+                             <LabelList dataKey="percentLabel" position="top" style={{ fontSize: '10px', fill: '#4b5563', fontWeight: 'bold' }} />
+                           </Bar>
+                         </BarChart>
+                       </ResponsiveContainer>
+                     </div>
+                   </div>
+                   <div className="bg-white rounded-2xl md:rounded-xl shadow-sm p-4 md:p-5 border border-gray-100 overflow-x-auto">
+                     <h3 className="text-base md:text-lg font-bold text-gray-700 mb-4 border-b pb-2 whitespace-nowrap">สรุปแยกตามประเภทเงิน</h3>
+                     <div className="h-[300px] w-full overflow-hidden">
+                       <ResponsiveContainer width="100%" height="100%">
+                         <BarChart data={moneyTypeCompareData} margin={{ top: 25, right: 10, left: 10, bottom: 5 }}>
+                           <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                           <XAxis dataKey="name" tick={{fontSize: 11}} interval={0} angle={-45} textAnchor="end" height={70} tickFormatter={(value) => typeof value === 'string' && value.length > 15 ? value.substring(0, 15) + '...' : value} />
+                          <YAxis tickFormatter={(value) => new Intl.NumberFormat('th-TH', { notation: "compact", compactDisplay: "short" }).format(value)} tick={{fontSize: 11}} />
+                          <Tooltip formatter={(value) => formatCurrency(value) + ' ฿'} />
+                          <Legend wrapperStyle={{ fontSize: '12px' }}/>
+                          <Bar dataKey="งบประมาณ" fill="#0ea5e9" radius={[4, 4, 0, 0]} />
+                          <Bar dataKey="ใช้ไป" fill="#f59e0b" radius={[4, 4, 0, 0]}>
+                            <LabelList dataKey="percentLabel" position="top" style={{ fontSize: '10px', fill: '#4b5563', fontWeight: 'bold' }} />
+                          </Bar>
+                        </BarChart>
+                       </ResponsiveContainer>
+                     </div>
+                   </div>
+                </div>
+              </>
+            )}
+          </div>
+        );
+      };
+
+      // ==========================================
+      // VIEW 1: Ledger (บันทึก)
+      // ==========================================
+      const LedgerView = () => {
+        const [newAct, setNewAct] = useState({ name: '', allocatedBudget: '', moneyType: moneyTypes[0] || '', responsible: '', status: statusTypes[0] || 'ยังไม่เริ่มต้น' });
+        const initialActName = uniqueActivityNames[0] || '';
+        const initialMoneyTypes = activities.filter(a => a.name === initialActName).map(a => a.moneyType);
+        
+        const [newExp, setNewExp] = useState({ 
+          date: '', type: expenseTypes[0] || '', details: '', amount: '', 
+          activityName: initialActName, moneyType: initialMoneyTypes[0] || ''
+        });
+
+        const [editingActId, setEditingActId] = useState(null);
+        const [editActForm, setEditActForm] = useState({});
+        const [editingExpId, setEditingExpId] = useState(null);
+        const [editExpForm, setEditExpForm] = useState({});
+
+        const totalIncome = activities.reduce((sum, a) => sum + Number(a.allocatedBudget), 0);
+        const totalExpense = expenses.reduce((sum, e) => sum + Number(e.amount), 0);
+        const totalBalance = totalIncome - totalExpense;
+
+        const totalExpensePercent = totalIncome > 0 ? ((totalExpense / totalIncome) * 100).toFixed(1) : 0;
+        const totalBalancePercent = totalIncome > 0 ? ((totalBalance / totalIncome) * 100).toFixed(1) : 0;
+
+        const uniqueActivitiesList = [];
+        const seenNames = new Set();
+        activities.forEach(act => {
+          if (!seenNames.has(act.name)) { seenNames.add(act.name); uniqueActivitiesList.push(act); }
+        });
+        const totalActCount = uniqueActivitiesList.length;
+        const inProgressCount = uniqueActivitiesList.filter(a => a.status === 'อยู่ระหว่างดำเนินการ' || a.status === 'กำลังดำเนินการ').length;
+        const completedCount = uniqueActivitiesList.filter(a => a.status === 'ดำเนินการสำเร็จ' || a.status === 'เสร็จสิ้น').length;
+
+        const moneyTypeProgress = moneyTypes.map(type => {
+          const typeActs = activities.filter(a => a.moneyType === type);
+          const allocated = typeActs.reduce((sum, a) => sum + Number(a.allocatedBudget), 0);
+          const targetIds = typeActs.map(a => a.id);
+          const typeExp = expenses.filter(e => targetIds.includes(e.activityId));
+          const used = typeExp.reduce((sum, e) => sum + Number(e.amount), 0);
+          const percent = allocated > 0 ? (used / allocated) * 100 : 0;
+          return { type, allocated, used, percent: Math.min(percent, 100) };
+        }).filter(d => d.allocated > 0);
+
+        const incomeChartData = uniqueActivityNames.map(name => {
+          const total = activities.filter(a => a.name === name).reduce((sum, a) => sum + Number(a.allocatedBudget), 0);
+          return { name, value: total };
+        }).filter(d => d.value > 0);
+
+        const expenseChartData = uniqueActivityNames.map(name => {
+          const actIds = activities.filter(a => a.name === name).map(a => a.id);
+          const total = expenses.filter(e => actIds.includes(e.activityId)).reduce((sum, e) => sum + Number(e.amount), 0);
+          return { name, value: total };
+        }).filter(d => d.value > 0);
+
+        const handleAddActivity = async () => {
+          if (!newAct.name || !newAct.allocatedBudget) { showToast("กรุณากรอกชื่อกิจกรรมและยอดเงิน"); return; }
+          setIsSaving(true);
+          const newId = new Date().getTime(); 
+          const actData = { ...newAct, id: newId, allocatedBudget: Number(newAct.allocatedBudget), projectId: activeProject.projectName, projectResponsible: activeProject.responsible, managementGroup: activeProject.managementGroup, plan: activeProject.plan };
+          try {
+            await api.call('saveActivity', JSON.stringify(actData));
+            setAllActivities([...allActivities, actData]);
+            setNewAct({ name: '', allocatedBudget: '', moneyType: moneyTypes[0] || '', responsible: '', status: statusTypes[0] || 'ยังไม่เริ่มต้น' });
+            showToast("เพิ่มกิจกรรมสำเร็จ");
+          } catch(e) { showToast("บันทึกข้อมูลล้มเหลว"); }
+          setIsSaving(false);
+        };
+
+        const startEditAct = (act) => { setEditingActId(act.id); setEditActForm({ ...act }); };
+        const saveEditAct = async () => {
+          setIsSaving(true);
+          const updatedAct = { ...editActForm, allocatedBudget: Number(editActForm.allocatedBudget), projectId: activeProject.projectName, projectResponsible: activeProject.responsible, managementGroup: activeProject.managementGroup, plan: activeProject.plan };
+          try {
+            await api.call('saveActivity', JSON.stringify(updatedAct));
+            setAllActivities(allActivities.map(a => a.id === editingActId ? updatedAct : a));
+            setEditingActId(null);
+            showToast("แก้ไขกิจกรรมสำเร็จ");
+          } catch(e) { showToast("บันทึกข้อมูลล้มเหลว"); }
+          setIsSaving(false);
+        };
+
+        const confirmDeleteAct = (id, name, moneyType) => {
+          setConfirmModal({
+            isOpen: true, title: 'ยืนยันการลบงบประมาณ',
+            message: `คุณต้องการลบ "${name}" ใช่หรือไม่? รายการเบิกจ่ายที่เกี่ยวข้องจะถูกลบด้วย`,
+            onConfirm: async () => {
+              setIsSaving(true);
+              setConfirmModal({ isOpen: false });
+              try {
+                await api.call('deleteActivity', id);
+                setAllActivities(allActivities.filter(a => a.id !== id));
+                setAllExpenses(allExpenses.filter(e => e.activityId !== id));
+                showToast("ลบกิจกรรมสำเร็จ");
+              } catch(e) { showToast("ลบข้อมูลล้มเหลว"); }
+              setIsSaving(false);
+            }
+          });
+        };
+
+        const handleAddExpense = async () => {
+          const targetAct = activities.find(a => a.name === newExp.activityName && a.moneyType === newExp.moneyType);
+          if (!newExp.date || !newExp.type || !newExp.amount || !targetAct) { showToast("กรุณากรอกข้อมูลให้ครบและเลือกประเภทเงินให้ถูกต้อง"); return; }
+          setIsSaving(true);
+          const newId = new Date().getTime();
+          const expData = { 
+            id: newId, activityName: targetAct.name, activityId: targetAct.id, date: newExp.date, 
+            type: newExp.type, details: newExp.details, amount: Number(newExp.amount), moneyType: newExp.moneyType, projectId: activeProject.projectName, projectResponsible: activeProject.responsible, managementGroup: activeProject.managementGroup, plan: activeProject.plan
+          };
+          try {
+            await api.call('saveExpense', JSON.stringify(expData));
+            setAllExpenses([...allExpenses, expData]);
+            setNewExp({ ...newExp, date: '', details: '', amount: '' });
+            showToast("เพิ่มรายจ่ายสำเร็จ");
+          } catch(e) { showToast("บันทึกข้อมูลล้มเหลว"); }
+          setIsSaving(false);
+        };
+
+        const startEditExp = (exp) => { 
+          const act = activities.find(a => a.id === exp.activityId);
+          setEditingExpId(exp.id); 
+          let formattedDate = exp.date || '';
+          if (formattedDate) {
+            const d = new Date(formattedDate);
+            if (!isNaN(d.getTime())) {
+              const year = d.getFullYear();
+              const month = String(d.getMonth() + 1).padStart(2, '0');
+              const day = String(d.getDate()).padStart(2, '0');
+              formattedDate = `${year}-${month}-${day}`;
+            }
+          }
+          setEditExpForm({ ...exp, date: formattedDate, activityName: act?.name || exp.activityName || '', moneyType: act?.moneyType || '' }); 
+        };
+        
+        const saveEditExp = async () => {
+          const targetAct = activities.find(a => a.name === editExpForm.activityName && a.moneyType === editExpForm.moneyType);
+          if(!targetAct) { showToast("กรุณาเลือกประเภทเงินที่มีอยู่ในกิจกรรมนี้"); return; }
+          setIsSaving(true);
+          const updatedExp = { ...editExpForm, amount: Number(editExpForm.amount), activityId: targetAct.id, activityName: targetAct.name, projectId: activeProject.projectName, projectResponsible: activeProject.responsible, managementGroup: activeProject.managementGroup, plan: activeProject.plan };
+          try {
+            await api.call('saveExpense', JSON.stringify(updatedExp));
+            setAllExpenses(allExpenses.map(e => e.id === editingExpId ? updatedExp : e));
+            setEditingExpId(null);
+            showToast("แก้ไขรายจ่ายสำเร็จ");
+          } catch(e) { showToast("บันทึกข้อมูลล้มเหลว"); }
+          setIsSaving(false);
+        };
+        
+        const confirmDeleteExp = (id, typeName, details) => {
+          setConfirmModal({
+            isOpen: true, title: 'ยืนยันการลบรายการเบิกจ่าย',
+            message: `คุณต้องการลบรายการ "${typeName}${details ? ' - ' + details : ''}" ใช่หรือไม่?`,
+            onConfirm: async () => {
+              setIsSaving(true);
+              setConfirmModal({ isOpen: false });
+              try {
+                await api.call('deleteExpense', id);
+                setAllExpenses(allExpenses.filter(e => e.id !== id));
+                showToast("ลบรายจ่ายสำเร็จ");
+              } catch(e) { showToast("ลบข้อมูลล้มเหลว"); }
+              setIsSaving(false);
+            }
+          });
+        };
+
+        return (
+          <div className="space-y-4 md:space-y-6 animate-in fade-in duration-300 relative">
+            <datalist id="activityNamesList">{uniqueActivityNames.map(name => <option key={name} value={name} />)}</datalist>
+            <datalist id="responsibleList">{uniqueResponsibles.map(r => <option key={r} value={r} />)}</datalist>
+
+            {/* Modal แก้ไขกิจกรรม */}
+            {editingActId && (
+              <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[200] p-4 animate-in fade-in">
+                <div className="bg-white rounded-xl shadow-2xl max-w-md w-full max-h-[90vh] flex flex-col scale-in-center">
+                  <div className="bg-blue-600 p-4 flex items-center justify-between text-white rounded-t-xl shrink-0">
+                    <div className="flex items-center gap-2"><Edit size={18} /><h3 className="font-bold text-base md:text-sm">แก้ไขกิจกรรม</h3></div>
+                    <button onClick={() => setEditingActId(null)} className="text-blue-100 hover:text-white p-1"><X size={20}/></button>
+                  </div>
+                  <div className="p-5 space-y-4 overflow-y-auto flex-grow">
+                    <div><label className="block text-sm md:text-xs font-bold text-gray-700 mb-1">ชื่อกิจกรรม</label><input type="text" list="activityNamesList" className="w-full border border-gray-300 p-2.5 md:p-2 rounded-lg md:rounded text-base md:text-sm focus:ring-2 focus:ring-blue-500 outline-none" value={editActForm.name} onChange={e=>setEditActForm({...editActForm, name: e.target.value})}/></div>
+                    <div><label className="block text-sm md:text-xs font-bold text-gray-700 mb-1">ยอดเงิน</label><input type="number" className="w-full border border-gray-300 p-2.5 md:p-2 rounded-lg md:rounded text-base md:text-sm text-right focus:ring-2 focus:ring-blue-500 outline-none" value={editActForm.allocatedBudget} onChange={e=>setEditActForm({...editActForm, allocatedBudget: e.target.value})}/></div>
+                    <div><label className="block text-sm md:text-xs font-bold text-gray-700 mb-1">ประเภทเงิน</label><select className="w-full border border-gray-300 p-2.5 md:p-2 rounded-lg md:rounded text-base md:text-sm focus:ring-2 focus:ring-blue-500 outline-none" value={editActForm.moneyType} onChange={e=>setEditActForm({...editActForm, moneyType: e.target.value})}>{moneyTypes.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
+                    <div><label className="block text-sm md:text-xs font-bold text-gray-700 mb-1">ผู้รับผิดชอบ</label><input type="text" className="w-full border border-gray-300 p-2.5 md:p-2 rounded-lg md:rounded text-base md:text-sm focus:ring-2 focus:ring-blue-500 outline-none" value={editActForm.responsible || ''} onChange={e=>setEditActForm({...editActForm, responsible: e.target.value})}/></div>
+                    <div><label className="block text-sm md:text-xs font-bold text-gray-700 mb-1">สถานะ</label><select className="w-full border border-gray-300 p-2.5 md:p-2 rounded-lg md:rounded text-base md:text-sm focus:ring-2 focus:ring-blue-500 outline-none" value={editActForm.status || statusTypes[0]} onChange={e=>setEditActForm({...editActForm, status: e.target.value})}>{statusTypes.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
+                  </div>
+                  <div className="bg-gray-50 p-4 flex flex-col sm:flex-row justify-end gap-3 border-t border-gray-200 rounded-b-xl shrink-0">
+                    <button onClick={() => setEditingActId(null)} className="px-4 py-3 md:py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 font-bold md:font-medium text-base md:text-sm w-full sm:w-auto">ยกเลิก</button>
+                    <button onClick={saveEditAct} disabled={isSaving} className="px-4 py-3 md:py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-bold md:font-medium shadow-sm text-base md:text-sm disabled:opacity-50 w-full sm:w-auto">บันทึกการแก้ไข</button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Modal แก้ไขรายการเบิกจ่าย */}
+            {editingExpId && (
+              <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[200] p-4 animate-in fade-in pb-safe">
+                <div className="bg-white rounded-xl shadow-2xl max-w-md w-full max-h-[90vh] flex flex-col scale-in-center">
+                  <div className="bg-blue-600 p-4 flex items-center justify-between text-white rounded-t-xl shrink-0">
+                    <div className="flex items-center gap-2"><Edit size={18} /><h3 className="font-bold text-base md:text-sm">แก้ไขรายการเบิกจ่าย</h3></div>
+                    <button onClick={() => setEditingExpId(null)} className="text-blue-100 hover:text-white p-1"><X size={20}/></button>
+                  </div>
+                  <div className="p-5 space-y-4 overflow-y-auto flex-grow">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4">
+                      <div><label className="block text-sm md:text-xs font-bold text-gray-700 mb-1">วันที่</label><input type="date" className="w-full border border-gray-300 p-2.5 md:p-2 rounded-lg md:rounded text-base md:text-sm focus:ring-2 focus:ring-blue-500 outline-none" value={editExpForm.date || ''} onChange={e=>setEditExpForm({...editExpForm, date: e.target.value})}/></div>
+                      <div><label className="block text-sm md:text-xs font-bold text-gray-700 mb-1">ประเภทรายการ</label><select className="w-full border border-gray-300 p-2.5 md:p-2 rounded-lg md:rounded text-base md:text-sm focus:ring-2 focus:ring-blue-500 outline-none" value={editExpForm.type} onChange={e=>setEditExpForm({...editExpForm, type: e.target.value})}>{expenseTypes.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
+                    </div>
+                    <div><label className="block text-sm md:text-xs font-bold text-gray-700 mb-1">รายละเอียดเพิ่มเติม</label><input type="text" placeholder="ระบุรายละเอียด" className="w-full border border-gray-300 p-2.5 md:p-2 rounded-lg md:rounded text-base md:text-sm focus:ring-2 focus:ring-blue-500 outline-none" value={editExpForm.details} onChange={e=>setEditExpForm({...editExpForm, details: e.target.value})}/></div>
+                    <div>
+                      <label className="block text-sm md:text-xs font-bold text-gray-700 mb-1">ชื่อกิจกรรมที่หักงบ</label>
+                      <select className="w-full border border-gray-300 p-2.5 md:p-2 rounded-lg md:rounded text-base md:text-sm focus:ring-2 focus:ring-blue-500 outline-none" value={editExpForm.activityName} onChange={e=>{
+                        const newName = e.target.value;
+                        const newAvailableTypes = activities.filter(a => a.name === newName).map(a => a.moneyType);
+                        setEditExpForm({...editExpForm, activityName: newName, moneyType: newAvailableTypes[0] || ''});
+                      }}>{uniqueActivityNames.map(name => <option key={name} value={name}>{name}</option>)}</select>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4">
+                      <div>
+                        <label className="block text-sm md:text-xs font-bold text-gray-700 mb-1">ประเภทเงิน</label>
+                        <select className="w-full border border-gray-300 p-2.5 md:p-2 rounded-lg md:rounded text-base md:text-sm bg-gray-50 text-blue-700 font-medium focus:ring-2 focus:ring-blue-500 outline-none" value={editExpForm.moneyType} onChange={e=>setEditExpForm({...editExpForm, moneyType: e.target.value})}>
+                          {activities.filter(a => a.name === editExpForm.activityName).map(a => a.moneyType).map(t => <option key={t} value={t}>{t}</option>)}
+                        </select>
+                      </div>
+                      <div><label className="block text-sm md:text-xs font-bold text-gray-700 mb-1">จำนวนเงินที่เบิก</label><input type="number" className="w-full border border-gray-300 p-2.5 md:p-2 rounded-lg md:rounded text-base md:text-sm text-right font-bold text-red-600 focus:ring-2 focus:ring-blue-500 outline-none" value={editExpForm.amount} onChange={e=>setEditExpForm({...editExpForm, amount: e.target.value})}/></div>
+                    </div>
+                  </div>
+                  <div className="bg-gray-50 p-4 flex flex-col sm:flex-row justify-end gap-3 border-t border-gray-200 rounded-b-xl shrink-0">
+                    <button onClick={() => setEditingExpId(null)} className="px-4 py-3 md:py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 font-bold md:font-medium text-base md:text-sm w-full sm:w-auto">ยกเลิก</button>
+                    <button onClick={saveEditExp} disabled={isSaving} className="px-4 py-3 md:py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-bold md:font-medium shadow-sm text-base md:text-sm disabled:opacity-50 w-full sm:w-auto">บันทึกการแก้ไข</button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="mb-6 md:mb-8">
+              <div className="flex items-center justify-between mb-3 md:mb-4 mt-2">
+                <h2 className="text-xl md:text-2xl font-bold text-purple-700 flex items-center gap-2">
+                  <TrendingUp size={24} className="md:w-7 md:h-7" /> ภาพรวมโครงการ (Dashboard)
+                </h2>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4 mb-4">
+                <div className="bg-white rounded-2xl md:rounded-xl shadow-sm p-4 border-t-[5px] border-purple-400 relative overflow-hidden flex flex-row md:flex-col items-center md:items-start justify-between md:justify-between h-auto md:h-28 transition-transform active:scale-[0.98] md:active:scale-100 hover:-translate-y-1">
+                   <div className="text-sm font-semibold text-gray-500 leading-tight">กิจกรรมทั้งหมด</div>
+                   <div className="text-3xl md:text-4xl font-black text-purple-700 leading-none mt-2 md:mt-0">{totalActCount}</div>
+                </div>
+                <div className="bg-white rounded-2xl md:rounded-xl shadow-sm p-4 border-t-[5px] border-blue-400 relative overflow-hidden flex flex-row md:flex-col items-center md:items-start justify-between md:justify-between h-auto md:h-28 transition-transform active:scale-[0.98] md:active:scale-100 hover:-translate-y-1">
+                   <div className="text-sm font-semibold text-gray-500 leading-tight">กำลังดำเนินการ</div>
+                   <div className="text-3xl md:text-4xl font-black text-blue-500 leading-none mt-2 md:mt-0">{inProgressCount}</div>
+                </div>
+                <div className="bg-white rounded-2xl md:rounded-xl shadow-sm p-4 border-t-[5px] border-green-400 relative overflow-hidden flex flex-row md:flex-col items-center md:items-start justify-between md:justify-between h-auto md:h-28 transition-transform active:scale-[0.98] md:active:scale-100 hover:-translate-y-1">
+                   <div className="text-sm font-semibold text-gray-500 leading-tight">เสร็จสิ้นแล้ว</div>
+                   <div className="text-3xl md:text-4xl font-black text-green-500 leading-none mt-2 md:mt-0">{completedCount}</div>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4 mb-4 md:mb-6">
+                <div className="bg-white rounded-2xl md:rounded-xl shadow-sm p-5 md:p-6 border-t-[5px] border-blue-500 relative overflow-hidden transition-transform active:scale-[0.98] md:active:scale-100 hover:-translate-y-1">
+                  <div className="text-xs md:text-sm font-bold text-gray-500 mb-2">งบประมาณประจำปี (บาท)</div>
+                  <div className="text-3xl lg:text-4xl font-black text-blue-600 relative z-10 truncate">{formatCurrency(totalIncome)}</div>
+                  <Wallet className="absolute -right-4 -bottom-4 text-blue-50 opacity-50 w-28 h-28 md:w-32 md:h-32 pointer-events-none" />
+                </div>
+                <div className="bg-white rounded-2xl md:rounded-xl shadow-sm p-5 md:p-6 border-t-[5px] border-pink-500 relative overflow-hidden transition-transform active:scale-[0.98] md:active:scale-100 hover:-translate-y-1">
+                  <div className="text-xs md:text-sm font-bold text-gray-500 mb-2">งบประมาณที่ใช้ไป (บาท)</div>
+                  <div className="flex items-baseline gap-2 truncate relative z-10">
+                    <div className="text-3xl lg:text-4xl font-black text-pink-500">{formatCurrency(totalExpense)}</div>
+                    <div className="text-sm font-bold text-pink-400 mb-1 bg-pink-50 px-2 py-0.5 rounded-full">({totalExpensePercent}%)</div>
+                  </div>
+                  <FileText className="absolute -right-4 -bottom-4 text-pink-50 opacity-50 w-28 h-28 md:w-32 md:h-32 pointer-events-none" />
+                </div>
+                <div className="bg-white rounded-2xl md:rounded-xl shadow-sm p-5 md:p-6 border-t-[5px] border-emerald-500 relative overflow-hidden transition-transform active:scale-[0.98] md:active:scale-100 hover:-translate-y-1 md:col-span-2 lg:col-span-1">
+                  <div className="text-xs md:text-sm font-bold text-gray-500 mb-2">งบประมาณคงเหลือ (บาท)</div>
+                  <div className="flex items-baseline gap-2 truncate relative z-10">
+                    <div className="text-3xl lg:text-4xl font-black text-emerald-600">{formatCurrency(totalBalance)}</div>
+                    <div className="text-sm font-bold text-emerald-500 mb-1 bg-emerald-50 px-2 py-0.5 rounded-full">({totalBalancePercent}%)</div>
+                  </div>
+                  <CheckCircle className="absolute -right-4 -bottom-4 text-emerald-50 opacity-50 w-28 h-28 md:w-32 md:h-32 pointer-events-none" />
+                </div>
+              </div>
+
+              {moneyTypeProgress.length > 0 && (
+                <div className="bg-white rounded-2xl md:rounded-xl shadow-sm p-5 md:p-6 mb-6">
+                   <h3 className="text-gray-800 font-bold mb-4 md:mb-5 flex items-center gap-2 border-b border-gray-100 pb-2 md:pb-3 text-sm md:text-base">
+                     <Wallet size={20} className="text-pink-500" /> สรุปงบประมาณตามประเภทเงิน 
+                   </h3>
+                   <div className="space-y-4 md:space-y-5">
+                     {moneyTypeProgress.map((item, idx) => (
+                       <div key={idx} className="group">
+                         <div className="flex flex-col sm:flex-row sm:justify-between text-xs md:text-sm font-bold text-gray-700 mb-2 gap-1.5">
+                           <span className="truncate">{item.type}</span>
+                           <span className="text-purple-600 bg-purple-50 px-2 py-1 md:py-0.5 rounded-md self-start sm:self-auto whitespace-nowrap text-xs">{formatCurrency(item.used)} ฿</span>
+                         </div>
+                         <div className="w-full bg-gray-100 rounded-full h-2.5 md:h-3 overflow-hidden shadow-inner">
+                           <div 
+                             className="bg-gradient-to-r from-purple-500 to-pink-500 h-2.5 md:h-3 rounded-full transition-all duration-1000 ease-out" 
+                             style={{ width: `${item.percent}%` }}
+                           ></div>
+                         </div>
+                         <div className="text-[10px] md:text-xs text-gray-400 mt-1 text-right">จากทั้งหมด {formatCurrency(item.allocated)} ฿</div>
+                       </div>
+                     ))}
+                   </div>
+                </div>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 items-start">
+              {/* Card จัดการงบประมาณ (รายรับ) */}
+              <div className="bg-white rounded-2xl md:rounded-lg shadow border border-gray-200 overflow-hidden flex flex-col h-full min-w-0 relative">
+                {!isAdmin && <div className="absolute top-2 right-2 flex items-center gap-1 text-[10px] text-gray-500 bg-gray-100 px-2 py-1 rounded-full border border-gray-200 z-10 shadow-sm"><Lock size={10} /> ดูได้เท่านั้น</div>}
+                <div className="bg-green-200 text-green-900 text-center py-3 font-bold border-b border-green-300">จัดการงบประมาณกิจกรรม (รายรับ)</div>
+                
+                <div className="h-[220px] md:h-[250px] p-2 md:p-4 border-b border-gray-100 w-full min-w-0">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie data={incomeChartData} cx="50%" cy="50%" outerRadius="75%" dataKey="value" label={({name, percent}) => `${(percent * 100).toFixed(0)}%`}>
+                        {incomeChartData.map((_, i) => <Cell key={`cell-${i}`} fill={COLORS[i % COLORS.length]} />)}
+                      </Pie>
+                      <Tooltip formatter={(val) => formatCurrency(val) + ' บาท'} />
+                      <Legend verticalAlign="bottom" wrapperStyle={{ fontSize: '11px' }}/>
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+                
+                {/* Desktop Table (Hidden on Mobile) */}
+                <div className="hidden md:block table-container flex-grow">
+                  <table className="min-w-table w-full text-xs text-left whitespace-nowrap border-b border-gray-200">
+                    <thead className="bg-yellow-100 text-gray-700 border-b border-yellow-200">
+                      <tr>
+                        <th className="px-3 py-2.5 text-center w-8">ที่</th><th className="px-3 py-2.5">กิจกรรม</th><th className="px-3 py-2.5 text-right">จำนวนเงิน</th><th className="px-3 py-2.5">ประเภทเงิน</th><th className="px-3 py-2.5">ผู้รับผิดชอบ</th><th className="px-3 py-2.5 text-center">สถานะ</th>
+                        {isAdmin && <th className="px-3 py-2.5 text-center w-20 sticky right-0 bg-yellow-100 shadow-[-2px_0_4px_rgba(0,0,0,0.05)] md:static md:shadow-none">จัดการ</th>}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {activities.map((act, idx) => (
+                        <tr key={act.id} className="hover:bg-gray-50 group transition-colors">
+                          <td className="px-3 py-3 text-center text-gray-500">{idx + 1}</td>
+                          <td className="px-3 py-3 font-medium truncate max-w-[120px] md:max-w-[200px]" title={act.name}>{act.name}</td>
+                          <td className="px-3 py-3 text-right font-bold text-green-700">{formatCurrency(act.allocatedBudget)}</td>
+                          <td className="px-3 py-3 text-gray-600 truncate max-w-[100px] md:max-w-[120px]" title={act.moneyType}>{act.moneyType}</td>
+                          <td className="px-3 py-3 text-gray-600" title={act.responsible}>{act.responsible || '-'}</td>
+                          <td className="px-3 py-3 text-center"><span className={`px-2 py-1 rounded-full text-[10px] font-medium whitespace-nowrap ${act.status === 'ดำเนินการสำเร็จ' ? 'bg-green-100 text-green-700' : (act.status === 'อยู่ระหว่างดำเนินการ' || act.status === 'กำลังดำเนินการ') ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700'}`}>{act.status || 'ยังไม่เริ่มต้น'}</span></td>
+                          {isAdmin && (
+                            <td className="px-3 py-3 text-center sticky right-0 bg-white group-hover:bg-gray-50 shadow-[-2px_0_4px_rgba(0,0,0,0.05)] md:static md:shadow-none transition-colors">
+                              <div className="flex items-center justify-center gap-1.5 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+                                <button onClick={() => startEditAct(act)} className="text-blue-600 bg-blue-50 hover:bg-blue-100 p-1.5 rounded" title="แก้ไข"><Edit size={14}/></button>
+                                <button onClick={() => confirmDeleteAct(act.id, act.name, act.moneyType)} className="text-red-600 bg-red-50 hover:bg-red-100 p-1.5 rounded" title="ลบ"><Trash2 size={14}/></button>
+                              </div>
+                            </td>
+                          )}
+                        </tr>
+                      ))}
+                      {activities.length === 0 && <tr><td colSpan={isAdmin ? "7" : "6"} className="py-8 text-center text-gray-400">ยังไม่มีข้อมูลกิจกรรม</td></tr>}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Mobile Cards View (Hidden on Desktop) */}
+                <div className="md:hidden flex flex-col gap-3 p-3 bg-gray-50 border-b border-gray-200 flex-grow">
+                  {activities.map((act, idx) => (
+                    <div key={act.id} className="bg-white p-4 rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.04)] border border-gray-100 relative active:scale-[0.99] transition-transform">
+                       <div className="flex justify-between items-start mb-3">
+                          <h4 className="font-bold text-gray-800 pr-20 leading-tight text-base">{idx + 1}. {act.name}</h4>
+                          <span className={`absolute top-4 right-3 px-2.5 py-1 rounded-full text-[10px] font-bold shadow-sm whitespace-nowrap ${act.status === 'ดำเนินการสำเร็จ' ? 'bg-green-100 text-green-700' : (act.status === 'อยู่ระหว่างดำเนินการ' || act.status === 'กำลังดำเนินการ') ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700'}`}>{act.status || 'ยังไม่เริ่มต้น'}</span>
+                       </div>
+                       <div className="text-xs text-gray-600 mb-3 space-y-2">
+                          <div className="flex justify-between items-center bg-green-50/50 p-2 rounded-lg border border-green-50"><span className="text-gray-500 font-medium">งบประมาณ:</span> <span className="font-bold text-green-700 text-sm">{formatCurrency(act.allocatedBudget)} ฿</span></div>
+                          <div className="flex justify-between items-center px-1"><span className="text-gray-400 font-medium">ประเภทเงิน:</span> <span className="font-medium text-gray-800">{act.moneyType}</span></div>
+                          <div className="flex justify-between items-center px-1"><span className="text-gray-400 font-medium">ผู้รับผิดชอบ:</span> <span className="font-medium text-gray-800">{act.responsible || '-'}</span></div>
+                       </div>
+                       {isAdmin && (
+                          <div className="flex gap-2 pt-3 border-t border-gray-50 mt-2">
+                             <button onClick={() => startEditAct(act)} className="flex-1 flex items-center justify-center gap-1.5 bg-blue-50 text-blue-700 hover:bg-blue-100 py-2.5 rounded-xl text-xs font-bold transition-colors active:scale-95"><Edit size={16}/> แก้ไข</button>
+                             <button onClick={() => confirmDeleteAct(act.id, act.name, act.moneyType)} className="flex-1 flex items-center justify-center gap-1.5 bg-red-50 text-red-700 hover:bg-red-100 py-2.5 rounded-xl text-xs font-bold transition-colors active:scale-95"><Trash2 size={16}/> ลบ</button>
+                          </div>
+                       )}
+                    </div>
+                  ))}
+                  {activities.length === 0 && <div className="py-10 text-center text-gray-400 bg-white rounded-2xl border border-gray-100 shadow-sm font-medium">ยังไม่มีข้อมูลกิจกรรม</div>}
+                </div>
+
+                {isAdmin ? (
+                  <div className="bg-green-50/70 p-3 md:p-4 border-t border-green-200">
+                    <h3 className="text-sm font-bold text-green-800 mb-3 flex items-center gap-1.5"><PlusCircle size={16}/> เพิ่มกิจกรรมใหม่</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3 md:gap-4">
+                      <div className="xl:col-span-1">
+                        <label className="block text-sm md:text-xs font-bold text-gray-600 mb-1">ชื่อกิจกรรม</label>
+                        <input type="text" list="activityNamesList" placeholder="ระบุชื่อกิจกรรม..." className="w-full border border-gray-300 px-4 py-3 md:px-3 md:py-2 rounded-xl md:rounded text-base md:text-xs focus:ring-2 focus:ring-green-500 outline-none bg-white shadow-sm md:shadow-none" value={newAct.name} onChange={e=>{
+                          const newName = e.target.value; const existingAct = allActivities.find(a => a.name === newName);
+                          setNewAct({...newAct, name: newName, responsible: existingAct && existingAct.responsible ? existingAct.responsible : newAct.responsible});
+                        }}/>
+                      </div>
+                      <div className="xl:col-span-1"><label className="block text-sm md:text-xs font-bold text-gray-600 mb-1">ยอดเงินจัดสรร</label><input type="number" placeholder="จำนวนเงิน" className="w-full border border-gray-300 px-4 py-3 md:px-3 md:py-2 rounded-xl md:rounded text-base md:text-xs text-right font-medium focus:ring-2 focus:ring-green-500 outline-none bg-white shadow-sm md:shadow-none" value={newAct.allocatedBudget} onChange={e=>setNewAct({...newAct, allocatedBudget: e.target.value})}/></div>
+                      <div className="xl:col-span-1"><label className="block text-sm md:text-xs font-bold text-gray-600 mb-1">ประเภทเงิน</label><select className="w-full border border-gray-300 px-4 py-3 md:px-3 md:py-2 rounded-xl md:rounded text-base md:text-xs focus:ring-2 focus:ring-green-500 outline-none bg-white shadow-sm md:shadow-none" value={newAct.moneyType} onChange={e=>setNewAct({...newAct, moneyType: e.target.value})}>{moneyTypes.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
+                      <div className="xl:col-span-1"><label className="block text-sm md:text-xs font-bold text-gray-600 mb-1">ผู้รับผิดชอบ</label><input type="text" list="responsibleList" placeholder="ชื่อผู้รับผิดชอบ" className="w-full border border-gray-300 px-4 py-3 md:px-3 md:py-2 rounded-xl md:rounded text-base md:text-xs focus:ring-2 focus:ring-green-500 outline-none bg-white shadow-sm md:shadow-none" value={newAct.responsible} onChange={e=>setNewAct({...newAct, responsible: e.target.value})}/></div>
+                      <div className="flex items-end pt-2 md:pt-0 xl:col-span-1 md:col-span-2">
+                        <button onClick={handleAddActivity} disabled={isSaving} className="bg-app-primary hover-bg-app-primary text-white px-4 py-3.5 md:py-2 rounded-xl md:rounded text-base md:text-xs w-full font-bold shadow-md transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50 active:scale-95 md:active:scale-100"><Check size={20} className="md:w-[14px] md:h-[14px]"/> บันทึกกิจกรรม</button>
+                      </div>
+                    </div>
+                  </div>
+                ) : <div className="p-4 text-center text-gray-400 text-xs italic bg-gray-50/50 border-t border-gray-100">* กรุณาเข้าสู่ระบบ Admin เพื่อเพิ่มหรือแก้ไขข้อมูล</div>}
+              </div>
+
+              {/* Card บันทึกค่าใช้จ่ายรายกิจกรรม */}
+              <div className="bg-white rounded-2xl md:rounded-lg shadow border border-gray-200 overflow-hidden flex flex-col h-full min-w-0 relative mt-4 md:mt-0">
+                {!isAdmin && <div className="absolute top-2 right-2 flex items-center gap-1 text-[10px] text-gray-500 bg-gray-100 px-2 py-1 rounded-full border border-gray-200 z-10 shadow-sm"><Lock size={10} /> ดูได้เท่านั้น</div>}
+                <div className="bg-red-200 text-red-900 text-center py-3 font-bold border-b border-red-300">บันทึกค่าใช้จ่ายรายกิจกรรม</div>
+                
+                <div className="h-[220px] md:h-[250px] p-2 md:p-4 border-b border-gray-100 w-full min-w-0">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie data={expenseChartData} cx="50%" cy="50%" outerRadius="75%" dataKey="value" label={({name, percent}) => `${(percent * 100).toFixed(0)}%`}>
+                        {expenseChartData.map((_, i) => <Cell key={`cell-${i}`} fill={COLORS[i % COLORS.length]} />)}
+                      </Pie>
+                      <Tooltip formatter={(val) => formatCurrency(val) + ' บาท'} />
+                      <Legend verticalAlign="bottom" wrapperStyle={{ fontSize: '11px' }}/>
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+                
+                {/* Desktop Table (Hidden on Mobile) */}
+                <div className="hidden md:block table-container flex-grow">
+                  <table className="min-w-table w-full text-xs text-left whitespace-nowrap border-b border-gray-200">
+                    <thead className="bg-yellow-100 text-gray-700 border-b border-yellow-200">
+                      <tr>
+                        <th className="px-3 py-2.5 text-center w-8">ที่</th><th className="px-3 py-2.5">วันที่</th><th className="px-3 py-2.5">ประเภท / รายละเอียด</th><th className="px-3 py-2.5">ชื่อกิจกรรมที่ใช้เงิน</th><th className="px-3 py-2.5 text-blue-800">หักจากประเภทเงิน</th><th className="px-3 py-2.5 text-right">จำนวนเงิน</th>
+                        {isAdmin && <th className="px-3 py-2.5 text-center w-20 sticky right-0 bg-yellow-100 shadow-[-2px_0_4px_rgba(0,0,0,0.05)] md:static md:shadow-none">จัดการ</th>}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {expenses.map((exp, idx) => {
+                        const act = activities.find(a => a.id === exp.activityId);
+                        return (
+                          <tr key={exp.id} className="hover:bg-gray-50 group transition-colors">
+                            <td className="px-3 py-3 text-center text-gray-500">{idx + 1}</td>
+                            <td className="px-3 py-3 text-gray-700">{formatDate(exp.date)}</td>
+                            <td className="px-3 py-3"><span className="font-semibold text-gray-800 bg-gray-200 px-1.5 py-0.5 rounded mr-1.5">{exp.type}</span>{exp.details && <span className="text-gray-600 ml-1 truncate max-w-[120px] inline-block align-bottom" title={exp.details}>{exp.details}</span>}</td>
+                            <td className="px-3 py-3 text-gray-800 font-medium truncate max-w-[120px] md:max-w-[200px]" title={exp.activityName || act?.name}>{exp.activityName || act?.name || '-'}</td>
+                            <td className="px-3 py-3 text-blue-600 truncate max-w-[100px] md:max-w-[120px]" title={act?.moneyType}>{act?.moneyType || '-'}</td>
+                            <td className="px-3 py-3 text-right font-bold text-red-600">{formatCurrency(exp.amount)}</td>
+                            {isAdmin && (
+                              <td className="px-3 py-3 text-center sticky right-0 bg-white group-hover:bg-gray-50 shadow-[-2px_0_4px_rgba(0,0,0,0.05)] md:static md:shadow-none transition-colors">
+                                <div className="flex items-center justify-center gap-1.5 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+                                  <button onClick={() => startEditExp(exp)} className="text-blue-600 bg-blue-50 hover:bg-blue-100 p-1.5 rounded" title="แก้ไข"><Edit size={14}/></button>
+                                  <button onClick={() => confirmDeleteExp(exp.id, exp.type, exp.details)} className="text-red-600 bg-red-50 hover:bg-red-100 p-1.5 rounded" title="ลบ"><Trash2 size={14}/></button>
+                                </div>
+                              </td>
+                            )}
+                          </tr>
+                        );
+                      })}
+                      {expenses.length === 0 && <tr><td colSpan={isAdmin ? "7" : "6"} className="py-8 text-center text-gray-400">ยังไม่มีประวัติการเบิกจ่าย</td></tr>}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Mobile Cards View (Hidden on Desktop) */}
+                <div className="md:hidden flex flex-col gap-3 p-3 bg-gray-50 border-b border-gray-200 flex-grow">
+                  {expenses.map((exp, idx) => {
+                    const act = activities.find(a => a.id === exp.activityId);
+                    return (
+                      <div key={exp.id} className="bg-white p-4 rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.04)] border border-gray-100 relative flex flex-col active:scale-[0.99] transition-transform">
+                         <div className="flex justify-between items-center mb-3 border-b border-gray-50 pb-2">
+                            <span className="text-xs font-bold text-gray-500 bg-gray-100 px-2 py-1 rounded-md">รายการที่ #{idx + 1}</span>
+                            <span className="text-sm font-bold text-gray-700 bg-gray-50 px-2 py-1 rounded border border-gray-100">{formatDate(exp.date)}</span>
+                         </div>
+                         <div className="text-base text-gray-800 mb-3 font-medium leading-tight">
+                            <span className="font-bold text-white bg-gray-700 px-2 py-0.5 rounded text-xs mr-2 align-middle">{exp.type}</span> 
+                            {exp.details && <span className="text-gray-700">{exp.details}</span>}
+                         </div>
+                         <div className="text-xs text-gray-600 mb-3 space-y-2">
+                            <div className="flex justify-between items-start gap-2 px-1">
+                               <span className="text-gray-400 whitespace-nowrap font-medium">หักจาก:</span> 
+                               <span className="text-right leading-tight font-medium text-gray-800">{exp.activityName || act?.name || '-'}</span>
+                            </div>
+                            <div className="flex justify-between items-center px-1">
+                               <span className="text-gray-400 font-medium">ประเภทเงิน:</span> 
+                               <span className="text-blue-600 font-medium">{act?.moneyType || '-'}</span>
+                            </div>
+                            <div className="flex justify-between items-center p-2.5 mt-2 bg-red-50/50 rounded-lg border border-red-50">
+                               <span className="text-gray-500 font-medium">ยอดเบิกจ่าย:</span> 
+                               <span className="font-bold text-red-600 text-base">-{formatCurrency(exp.amount)} ฿</span>
+                            </div>
+                         </div>
+                         {isAdmin && (
+                            <div className="flex gap-2 pt-2 mt-auto border-t border-gray-50">
+                               <button onClick={() => startEditExp(exp)} className="flex-1 flex items-center justify-center gap-1.5 bg-blue-50 text-blue-700 hover:bg-blue-100 py-2.5 rounded-xl text-xs font-bold transition-colors active:scale-95"><Edit size={16}/> แก้ไข</button>
+                               <button onClick={() => confirmDeleteExp(exp.id, exp.type, exp.details)} className="flex-1 flex items-center justify-center gap-1.5 bg-red-50 text-red-700 hover:bg-red-100 py-2.5 rounded-xl text-xs font-bold transition-colors active:scale-95"><Trash2 size={16}/> ลบ</button>
+                            </div>
+                         )}
+                      </div>
+                    );
+                  })}
+                  {expenses.length === 0 && <div className="py-10 text-center text-gray-400 bg-white rounded-2xl border border-gray-100 shadow-sm font-medium">ยังไม่มีประวัติการเบิกจ่าย</div>}
+                </div>
+
+                {isAdmin ? (
+                  <div className="bg-red-50/70 p-3 md:p-4 border-t border-red-200">
+                    <h3 className="text-sm font-bold text-red-800 mb-3 flex items-center gap-1.5"><PlusCircle size={16}/> บันทึกการเบิกจ่ายใหม่</h3>
+                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 md:gap-4">
+                      <div><label className="block text-sm md:text-xs font-bold text-gray-600 mb-1">วันที่ทำรายการ</label><input type="date" className="w-full border border-gray-300 px-4 py-3 md:px-3 md:py-2 rounded-xl md:rounded text-base md:text-xs focus:ring-2 focus:ring-red-500 outline-none bg-white shadow-sm md:shadow-none" value={newExp.date} onChange={e=>setNewExp({...newExp, date: e.target.value})}/></div>
+                      <div>
+                        <label className="block text-sm md:text-xs font-bold text-gray-600 mb-1">ประเภทรายการ / รายละเอียด</label>
+                        <div className="flex gap-2">
+                          <select className="w-2/5 md:w-1/3 border border-gray-300 px-2 py-3 md:p-2 rounded-xl md:rounded text-base md:text-xs bg-white font-medium focus:ring-2 focus:ring-red-500 outline-none shadow-sm md:shadow-none" value={newExp.type} onChange={e=>setNewExp({...newExp, type: e.target.value})}>{expenseTypes.map(t => <option key={t} value={t}>{t}</option>)}</select>
+                          <input type="text" placeholder="รายละเอียด..." className="w-3/5 md:w-2/3 border border-gray-300 px-4 py-3 md:px-3 md:py-2 rounded-xl md:rounded text-base md:text-xs focus:ring-2 focus:ring-red-500 outline-none bg-white shadow-sm md:shadow-none" value={newExp.details} onChange={e=>setNewExp({...newExp, details: e.target.value})}/>
+                        </div>
+                      </div>
+                      <div className="xl:col-span-2">
+                        <label className="block text-sm md:text-xs font-bold text-gray-600 mb-1">หักจากกิจกรรม / ประเภทเงิน</label>
+                        <div className="flex flex-col sm:flex-row gap-2">
+                          <select className="w-full sm:w-1/2 border border-gray-300 px-4 py-3 md:px-3 md:py-2 rounded-xl md:rounded text-base md:text-xs focus:ring-2 focus:ring-red-500 outline-none bg-white shadow-sm md:shadow-none" value={newExp.activityName} onChange={e=>{
+                            const newName = e.target.value; const availableTypes = activities.filter(a => a.name === newName).map(a => a.moneyType);
+                            setNewExp({...newExp, activityName: newName, moneyType: availableTypes[0] || ''});
+                          }}>{uniqueActivityNames.map(name => <option key={name} value={name}>{name}</option>)}</select>
+                          <select className="w-full sm:w-1/2 border border-blue-300 px-4 py-3 md:px-3 md:py-2 rounded-xl md:rounded text-base md:text-xs bg-blue-50 text-blue-700 font-bold focus:ring-2 focus:ring-blue-500 outline-none shadow-sm md:shadow-none" value={newExp.moneyType} onChange={e=>setNewExp({...newExp, moneyType: e.target.value})}>
+                            {activities.filter(a => a.name === newExp.activityName).map(a => <option key={a.id} value={a.moneyType}>{a.moneyType}</option>)}
+                          </select>
+                        </div>
+                      </div>
+                      <div className="xl:col-span-2 flex flex-col sm:flex-row gap-2 sm:items-end">
+                        <div className="w-full sm:w-2/3"><label className="block text-sm md:text-xs font-bold text-gray-600 mb-1">ยอดเงินที่เบิก</label><input type="number" placeholder="จำนวนเงิน" className="w-full border border-gray-300 px-4 py-3 md:px-3 md:py-2 rounded-xl md:rounded text-base md:text-xs text-right font-bold text-red-600 focus:ring-2 focus:ring-red-500 outline-none bg-white shadow-sm md:shadow-none" value={newExp.amount} onChange={e=>setNewExp({...newExp, amount: e.target.value})}/></div>
+                        <button onClick={handleAddExpense} disabled={isSaving} className="w-full sm:w-1/3 bg-red-600 text-white px-4 py-3.5 md:py-2 rounded-xl md:rounded text-base md:text-xs font-bold shadow-md transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50 active:scale-95 md:active:scale-100 mt-2 md:mt-0"><Check size={20} className="md:w-[14px] md:h-[14px]"/> บันทึกรายจ่าย</button>
+                      </div>
+                    </div>
+                  </div>
+                ) : <div className="p-4 text-center text-gray-400 text-xs italic bg-gray-50/50 border-t border-gray-100">* กรุณาเข้าสู่ระบบ Admin เพื่อเพิ่มหรือแก้ไขข้อมูล</div>}
+              </div>
+            </div>
+          </div>
+        );
+      };
+
+      // ==========================================
+      // VIEW 2: Summary
+      // ==========================================
+      const SummaryView = () => {
+        const [selectedActName, setSelectedActName] = useState(uniqueActivityNames[0] || '');
+        const [selectedMoneyType, setSelectedMoneyType] = useState('ALL'); 
+        const [isExporting, setIsExporting] = useState(false);
+
+        const fixThai = (str) => {
+          if (!str) return str;
+          return String(str).replace(/([ก-ฮ])([่-๋])([ัิ-ืุ-ู])/g, '$1$3$2');
+        };
+
+        if(uniqueActivityNames.length === 0) return <div className="p-4 md:p-8 text-center bg-white m-4 rounded-xl shadow-sm text-gray-500 font-medium border border-gray-100">ไม่มีข้อมูลกิจกรรมในโครงการนี้ กรุณาเพิ่มกิจกรรมในหน้าบันทึกก่อน</div>
+
+        const matchedActs = activities.filter(a => a.name === selectedActName);
+        const availableTypes = [...new Set(matchedActs.map(a => a.moneyType))];
+        const handleNameChange = (e) => { setSelectedActName(e.target.value); setSelectedMoneyType('ALL'); };
+
+        const filteredActs = selectedMoneyType === 'ALL' ? matchedActs : matchedActs.filter(a => a.moneyType === selectedMoneyType);
+        const targetActivityIds = filteredActs.map(a => a.id);
+
+        const totalBudget = filteredActs.reduce((sum, a) => sum + a.allocatedBudget, 0);
+        const activityExpenses = expenses.filter(e => targetActivityIds.includes(e.activityId));
+        const totalExpenses = activityExpenses.reduce((sum, exp) => sum + exp.amount, 0);
+        const remaining = totalBudget - totalExpenses;
+
+        let currentBalance = totalBudget;
+        const expenseHistory = activityExpenses.map((exp, index) => {
+          currentBalance -= exp.amount;
+          const act = activities.find(a => a.id === exp.activityId);
+          return { ...exp, no: index + 1, balance: currentBalance, usedMoneyType: act?.moneyType || '' };
+        });
+
+        const chartData = [ { name: 'รายจ่าย/โยกเงิน', value: totalExpenses }, { name: 'คงเหลือ', value: remaining > 0 ? remaining : 0 } ];
+        const baseInfo = matchedActs[0] || {};
+
+        const handlePrint = () => {
+          setIsExporting(true);
+          setTimeout(() => { window.print(); setIsExporting(false); }, 500);
+        };
+
+        const handleExportPDF = () => {
+          const element = document.getElementById('summary-export-area');
+          if (!element) return;
+          setIsExporting(true);
+          const opt = {
+            margin:       [10, 10, 10, 10],
+            filename:     `รายงานการใช้งบ_${selectedActName || 'ทั้งหมด'}.pdf`,
+            image:        { type: 'jpeg', quality: 1 }, 
+            html2canvas:  { scale: 2, useCORS: true, backgroundColor: '#ffffff', scrollY: 0 },
+            jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' },
+            pagebreak:    { mode: ['css', 'legacy'], avoid: ['.page-break-avoid', 'tr'] }
+          };
+          setTimeout(() => {
+            html2pdf().set(opt).from(element).save().then(() => {
+              setIsExporting(false); showToast("ส่งออก PDF สำเร็จ");
+            }).catch(err => {
+              console.error("PDF Export Error:", err); setIsExporting(false); showToast("เกิดข้อผิดพลาดในการส่งออก PDF");
+            });
+          }, 800);
+        };
+
+        return (
+          <div className="space-y-4 md:space-y-6 animate-in fade-in duration-300">
+            <div className="flex flex-col sm:flex-row justify-end gap-3 mb-2 no-print print:hidden">
+              <button onClick={handlePrint} className="flex items-center justify-center gap-2 bg-blue-500 hover:bg-blue-600 text-white px-4 py-3.5 md:py-2 w-full sm:w-auto rounded-xl md:rounded-lg text-base md:text-sm font-bold shadow-sm transition-colors active:scale-95 md:active:scale-100" disabled={isExporting || isSaving}>
+                <Printer size={18} className="md:w-4 md:h-4" /> พิมพ์รายงาน
+              </button>
+              <button onClick={handleExportPDF} className="flex items-center justify-center gap-2 bg-rose-500 hover:bg-rose-600 text-white px-4 py-3.5 md:py-2 w-full sm:w-auto rounded-xl md:rounded-lg text-base md:text-sm font-bold shadow-sm transition-colors active:scale-95 md:active:scale-100" disabled={isExporting || isSaving}>
+                {(isExporting || isSaving) ? <Loader2 size={18} className="animate-spin md:w-4 md:h-4" /> : <Download size={18} className="md:w-4 md:h-4" />} 
+                {isExporting ? 'กำลังสร้างฟอร์ม PDF...' : 'ส่งออกรายงาน (PDF)'}
+              </button>
+            </div>
+
+            <div className={isExporting ? "w-[800px] mx-auto bg-white print:w-full print:m-0" : "w-full"}>
+              <div id="summary-export-area" className="print:bg-white print:w-full">
+                
+                {isExporting && (
+                  <div className="px-6 pb-2 text-black bg-white text-[15px] leading-relaxed" style={{ fontFamily: "Tahoma, 'Leelawadee UI', 'Sarabun', sans-serif", textRendering: 'optimizeLegibility' }}>
+                    <div style={{ height: '1mm' }}></div>
+                    <div className="text-center mb-4 mt-0">
+                      <h1 className="text-2xl font-bold mb-1">รายงานสรุปการใช้จ่ายงบประมาณ</h1>
+                      <h2 className="text-xl font-bold">{appMode === 'NORMAL' ? 'โครงการ' : 'หมวด'}{fixThai(activeProject.projectName)}</h2>
+                    </div>
+                    <div className="mb-6">
+                      <div className="space-y-3 text-[15px] mb-4" style={{ lineHeight: '1.8' }}>
+                        <div className="block"><span className="font-bold mr-2">กิจกรรม:</span>{fixThai(selectedActName)}</div>
+                        <div className="grid grid-cols-2 gap-x-8 gap-y-3">
+                          <div className="block"><span className="font-bold mr-2">ประเภทเงิน:</span>{fixThai(selectedMoneyType === 'ALL' ? 'รวมทุกประเภท' : selectedMoneyType)}</div>
+                          <div className="block"><span className="font-bold mr-2">ผู้รับผิดชอบ:</span>{fixThai(baseInfo.responsible || '-')}</div>
+                        </div>
+                        <div className="block"><span className="font-bold mr-2">สถานะการดำเนินงาน:</span>{fixThai(baseInfo.status || 'ยังไม่เริ่มต้น')}</div>
+                      </div>
+                      <div className="grid grid-cols-3 gap-4 p-3 border-2 border-gray-800 rounded-lg bg-gray-50">
+                        <div className="text-center"><div className="font-bold text-gray-600 mb-1">งบประมาณที่จัดสรร</div><div className="font-bold text-lg">{formatCurrency(totalBudget)}</div></div>
+                        <div className="text-center border-l border-gray-400"><div className="font-bold text-gray-600 mb-1">รวมเบิกจ่ายแล้ว</div><div className="font-bold text-lg">{formatCurrency(totalExpenses)}</div></div>
+                        <div className="text-center border-l border-gray-400"><div className="font-bold text-gray-800 mb-1">ยอดคงเหลือ</div><div className="font-bold text-xl">{formatCurrency(remaining)}</div></div>
+                      </div>
+                    </div>
+                    <div className="mb-4">
+                      <h3 className="font-bold text-lg mb-2">รายละเอียดการเบิกจ่าย</h3>
+                      <table className="w-full text-sm border-spacing-0 bg-white" style={{ borderCollapse: 'separate', margin: 0 }}>
+                        <thead className="bg-gray-200">
+                          <tr className="page-break-avoid">
+                            <th className="border-t border-b border-l border-gray-800 py-2 px-3 text-center w-12 font-bold">ที่</th>
+                            <th className="border-t border-b border-l border-gray-800 py-2 px-3 text-center w-24 font-bold">วันที่</th>
+                            <th className="border-t border-b border-l border-gray-800 py-2 px-3 text-center font-bold">รายการ</th>
+                            <th className="border-t border-b border-l border-gray-800 py-2 px-3 text-center w-36 font-bold">ประเภทเงิน</th>
+                            <th className="border-t border-b border-l border-gray-800 py-2 px-3 text-center w-28 font-bold">จำนวนเงิน</th>
+                            <th className="border-t border-b border-l border-r border-gray-800 py-2 px-3 text-center w-28 font-bold">คงเหลือ</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {expenseHistory.length === 0 ? (
+                            <tr className="page-break-avoid"><td colSpan="6" className="border-b border-l border-r border-gray-800 py-6 text-center text-gray-500">ไม่มีรายการเบิกจ่าย</td></tr>
+                          ) : (
+                            expenseHistory.map(exp => (
+                              <tr key={exp.id} className="page-break-avoid">
+                                <td className="border-b border-l border-gray-800 py-2 px-3 text-center">{exp.no}</td>
+                                <td className="border-b border-l border-gray-800 py-2 px-3 text-center">{formatDate(exp.date)}</td>
+                                <td className="border-b border-l border-gray-800 py-2 px-3">{fixThai(exp.type)} {exp.details && <span className="text-gray-600"> - {fixThai(exp.details)}</span>}</td>
+                                <td className="border-b border-l border-gray-800 py-2 px-3 text-center">{fixThai(exp.usedMoneyType)}</td>
+                                <td className="border-b border-l border-gray-800 py-2 px-3 text-right">{formatCurrency(exp.amount)}</td>
+                                <td className="border-b border-l border-r border-gray-800 py-2 px-3 text-right font-medium">{formatCurrency(exp.balance)}</td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                      <div className="mt-8 px-8 pb-4 relative page-break-avoid">
+                        <div className="flex justify-center">
+                          <div className="text-center flex flex-col items-center">
+                            <div className="mb-1">ลงชื่อ...........................................................ผู้รายงาน</div>
+                            <div className="mb-1">(...........................................................)</div>
+                            <div>วันที่........./........../..........</div>
+                          </div>
+                        </div>
+                        <div className="mt-12 text-right text-[11px] text-gray-600 font-medium">ครูสันติ มีจันทร์ ผู้พัฒนาระบบ EduPlan System</div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {!isExporting && (
+                  <div className="space-y-4 md:space-y-6 bg-gray-50 p-3 md:p-4 rounded-2xl md:rounded-xl">
+                    <div className="bg-yellow-50 rounded-2xl md:rounded-lg border border-yellow-200 overflow-hidden shadow-sm">
+                      <div className="bg-yellow-300 py-3.5 md:py-3 px-4 font-bold text-gray-800 flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 text-base md:text-sm"><ListOrdered size={20} className="md:w-[18px] md:h-[18px]" /> สรุปค่าใช้จ่ายแยกตามกิจกรรม</div>
+                      </div>
+                      <div className="p-4 md:p-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+                        <div>
+                          <label className="block text-sm md:text-xs text-gray-600 font-medium mb-1.5">เลือกกิจกรรม</label>
+                          <select className="w-full border border-gray-300 rounded-xl md:rounded-lg p-3 md:p-2 bg-white text-base md:text-sm font-medium shadow-sm outline-none focus:ring-2 focus:ring-yellow-400" value={selectedActName} onChange={handleNameChange}>{uniqueActivityNames.map(name => <option key={name} value={name}>{name}</option>)}</select>
+                        </div>
+                        <div>
+                          <label className="block text-sm md:text-xs text-gray-600 font-medium mb-1.5">ประเภทเงิน</label>
+                          <select className="w-full border border-blue-400 rounded-xl md:rounded-lg p-3 md:p-2 bg-blue-50 text-blue-800 text-base md:text-sm font-bold shadow-sm outline-none focus:ring-2 focus:ring-blue-400" value={selectedMoneyType} onChange={(e) => setSelectedMoneyType(e.target.value)}>
+                            <option value="ALL">รวมทุกประเภท</option>
+                            {availableTypes.map(t => <option key={t} value={t}>{t}</option>)}
+                          </select>
+                        </div>
+                        <div><label className="block text-sm md:text-xs text-gray-600 font-medium mb-1.5">ผู้รับผิดชอบ</label><div className="w-full bg-gray-100 p-3 md:p-2 rounded-xl md:rounded-lg border text-gray-700 text-base md:text-sm font-medium flex items-center min-h-[50px] md:min-h-[38px]">{baseInfo.responsible || '-'}</div></div>
+                        <div>
+                          <label className="block text-sm md:text-xs text-gray-600 font-medium mb-1.5">สถานะ</label>
+                          <div className={`w-full p-3 md:p-2 rounded-xl md:rounded-lg border flex items-center gap-2 min-h-[50px] md:min-h-[38px] ${baseInfo.status === 'ดำเนินการสำเร็จ' || baseInfo.status === 'เสร็จสิ้น' ? 'bg-green-100 text-green-800 border-green-200' : (baseInfo.status === 'อยู่ระหว่างดำเนินการ' || baseInfo.status === 'กำลังดำเนินการ') ? 'bg-blue-100 text-blue-800 border-blue-200' : 'bg-gray-100 text-gray-800 border-gray-200'}`}>
+                            {baseInfo.status === 'ดำเนินการสำเร็จ' || baseInfo.status === 'เสร็จสิ้น' ? <CheckCircle size={20} className="md:w-[18px] md:h-[18px]"/> : <AlertCircle size={20} className="md:w-[18px] md:h-[18px]"/>}
+                            <span className="font-bold md:font-semibold text-base md:text-sm">{baseInfo.status || 'ยังไม่เริ่มต้น'}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 items-start">
+                      <div className="border border-gray-200 rounded-2xl md:rounded-lg overflow-hidden shadow-sm flex flex-col min-w-0 bg-white">
+                        <table className="w-full text-left border-collapse">
+                          <thead><tr><th colSpan="2" style={{ backgroundColor: themeColors.chartRemaining }} className="text-white py-3.5 px-5 md:px-4 text-base md:text-base font-bold tracking-wide">ภาพรวมงบประมาณ {selectedMoneyType !== 'ALL' && `(${selectedMoneyType})`}</th></tr></thead>
+                          <tbody className="bg-white">
+                            <tr className="border-b border-gray-100"><td className="py-4 md:py-4 px-5 md:px-4 text-gray-600 font-medium text-base md:text-sm">งบประมาณที่จัดสรร</td><td className="py-4 md:py-4 px-5 md:px-4 text-right font-bold text-xl md:text-lg text-blue-700">{formatCurrency(totalBudget)}</td></tr>
+                            <tr className="border-b border-gray-100"><td className="py-4 md:py-4 px-5 md:px-4 text-gray-600 font-medium text-base md:text-sm">รวมเบิกจ่ายแล้ว</td><td className="py-4 md:py-4 px-5 md:px-4 text-right font-bold text-xl md:text-lg" style={{ color: themeColors.chartExpense }}>{formatCurrency(totalExpenses)}</td></tr>
+                            <tr className="bg-green-50/50"><td className="py-5 md:py-4 px-5 md:px-4 text-gray-800 font-bold text-lg md:text-base">ยอดคงเหลือ</td><td className="py-5 md:py-4 px-5 md:px-4 text-right font-black text-2xl md:text-xl" style={{ color: themeColors.chartRemaining }}>{formatCurrency(remaining)}</td></tr>
+                          </tbody>
+                        </table>
+                      </div>
+                      <div className="bg-white border border-gray-200 rounded-2xl md:rounded-lg shadow-sm p-4 flex flex-col items-center min-h-[250px] w-full min-w-0">
+                         <h3 className="text-gray-600 font-bold mb-2 self-start text-base md:text-sm border-b border-gray-100 pb-2 w-full">สัดส่วนการใช้จ่าย</h3>
+                         <ResponsiveContainer width="100%" height={200}>
+                            <PieChart>
+                              <Pie data={chartData} cx="50%" cy="50%" innerRadius="50%" outerRadius="80%" dataKey="value">
+                                <Cell fill={themeColors.chartExpense} /> 
+                                <Cell fill={themeColors.chartRemaining} />
+                              </Pie>
+                              <Tooltip formatter={(val) => formatCurrency(val) + ' บาท'} />
+                              <Legend verticalAlign="bottom" height={36} wrapperStyle={{ fontSize: '12px' }}/>
+                            </PieChart>
+                          </ResponsiveContainer>
+                      </div>
+                    </div>
+
+                    <div className="overflow-hidden bg-white border border-gray-200 rounded-2xl md:rounded-lg shadow-sm">
+                      <h3 className="font-bold text-gray-700 bg-gray-100/80 border-b border-gray-200 py-3.5 px-4 text-base md:text-sm">รายละเอียดการเบิกจ่าย (Running Balance)</h3>
+                      
+                      {/* Desktop Table */}
+                      <div className="hidden md:block table-container">
+                        <table className="min-w-table w-full text-left whitespace-nowrap text-sm bg-white">
+                          <thead className="bg-pink-100/50 text-gray-800 border-b border-gray-200">
+                            <tr><th className="py-3 px-4 text-center w-12 border-r border-gray-100 text-xs font-bold uppercase tracking-wider">ที่</th><th className="py-3 px-4 text-center border-r border-gray-100 text-xs font-bold uppercase tracking-wider">วันที่</th><th className="py-3 px-4 border-r border-gray-100 text-xs font-bold uppercase tracking-wider">ประเภทรายการ / รายละเอียด</th><th className="py-3 px-4 border-r border-gray-100 text-blue-800 text-xs font-bold uppercase tracking-wider">หักจากประเภทเงิน</th><th className="py-3 px-4 text-right border-r border-gray-100 text-xs font-bold uppercase tracking-wider">จำนวนเงินที่เบิก</th><th className="py-3 px-4 text-right bg-green-50 text-xs font-bold uppercase tracking-wider text-green-800">ยอดคงเหลือรวม</th></tr>
+                          </thead>
+                          <tbody>
+                            {expenseHistory.length > 0 ? expenseHistory.map(exp => (
+                              <tr key={exp.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                                <td className="py-3 px-4 text-center text-gray-500 border-r border-gray-100">{exp.no}</td>
+                                <td className="py-3 px-4 text-center text-gray-600 border-r border-gray-100">{formatDate(exp.date)}</td>
+                                <td className="py-3 px-4 border-r border-gray-100"><span className="font-semibold bg-gray-100 px-1.5 py-0.5 rounded mr-1.5 text-gray-800 text-xs">{exp.type}</span>{exp.details && <span className="text-gray-600">{exp.details}</span>}</td>
+                                <td className="py-3 px-4 text-blue-600 border-r border-gray-100 font-medium">{exp.usedMoneyType}</td>
+                                <td className="py-3 px-4 text-right text-red-600 border-r border-gray-100 font-bold">{formatCurrency(exp.amount)}</td>
+                                <td className="py-3 px-4 text-right text-green-700 font-bold bg-green-50/30">{formatCurrency(exp.balance)}</td>
+                              </tr>
+                            )) : <tr><td colSpan="6" className="py-10 text-center text-gray-400 font-medium">ยังไม่มีการเบิกจ่าย</td></tr>}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {/* Mobile Cards View */}
+                      <div className="md:hidden flex flex-col gap-3 bg-gray-50 p-3">
+                        {expenseHistory.length > 0 ? expenseHistory.map(exp => (
+                          <div key={exp.id} className="bg-white p-4 rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.04)] border border-gray-100 flex flex-col relative">
+                            <div className="flex justify-between items-center mb-3 border-b border-gray-50 pb-2">
+                              <span className="text-xs font-bold text-gray-500 bg-gray-100 px-2 py-1 rounded-md">รายการที่ #{exp.no}</span>
+                              <span className="text-sm font-bold text-gray-700 bg-gray-50 px-2 py-1 rounded border border-gray-100">{formatDate(exp.date)}</span>
+                            </div>
+                            <div className="text-base text-gray-800 mb-3 font-medium leading-tight">
+                               <span className="font-bold text-white bg-gray-700 px-2 py-0.5 rounded text-xs mr-2 align-middle">{exp.type}</span> 
+                               {exp.details && <span className="text-gray-700">{exp.details}</span>}
+                            </div>
+                            <div className="flex justify-between text-sm mb-4 items-center px-1">
+                               <span className="text-gray-500 font-medium">ประเภทเงิน:</span>
+                               <span className="font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded">{exp.usedMoneyType}</span>
+                            </div>
+                            <div className="flex justify-between items-center bg-gray-50 p-3.5 rounded-xl border border-gray-100 shadow-inner">
+                               <div className="flex flex-col">
+                                  <span className="text-xs text-gray-500 font-bold mb-1">ยอดเบิกจ่าย</span>
+                                  <span className="text-base font-black text-red-500">-{formatCurrency(exp.amount)} ฿</span>
+                               </div>
+                               <div className="h-8 w-px bg-gray-200 mx-2"></div>
+                               <div className="flex flex-col items-end text-right">
+                                  <span className="text-xs text-gray-500 font-bold mb-1">คงเหลือสะสม</span>
+                                  <span className="text-xl font-black text-green-600">{formatCurrency(exp.balance)} ฿</span>
+                               </div>
+                            </div>
+                          </div>
+                        )) : (
+                          <div className="py-10 text-center text-gray-400 bg-white rounded-2xl shadow-sm border border-gray-100 font-medium">ยังไม่มีการเบิกจ่าย</div>
+                        )}
+                      </div>
+
+                    </div>
+
+                  </div>
+                )}
+                
+              </div>
+            </div>
+          </div>
+        );
+      };
+
+      // ==========================================
+      // VIEW 3: Overview by Type
+      // ==========================================
+      const OverviewByTypeView = () => {
+        const displayMoneyTypes = [...new Set([...moneyTypes, ...activities.map(a => a.moneyType)])];
+        const overviewData = displayMoneyTypes.map(type => {
+          const typeActivities = activities.filter(a => a.moneyType === type);
+          const allocated = typeActivities.reduce((sum, a) => sum + Number(a.allocatedBudget), 0);
+          const targetActivityIds = typeActivities.map(a => a.id);
+          const typeExpenses = expenses.filter(e => targetActivityIds.includes(e.activityId));
+          const used = typeExpenses.reduce((sum, e) => sum + Number(e.amount), 0);
+          return { type, allocated, used, remaining: allocated - used };
+        });
+
+        const totals = overviewData.reduce((acc, curr) => ({
+          allocated: acc.allocated + curr.allocated, used: acc.used + curr.used, remaining: acc.remaining + curr.remaining
+        }), { allocated: 0, used: 0, remaining: 0 });
+
+        const chartAllocatedData = overviewData.filter(d => d.allocated > 0).map(d => ({ name: d.type, value: d.allocated }));
+        const chartUsedData = overviewData.filter(d => d.used > 0).map(d => ({ name: d.type, value: d.used }));
+        const PIE_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899'];
+
+        const uniqueActivitiesForStatus = [];
+        const seenNamesForStatus = new Set();
+        activities.forEach(act => {
+          if (!seenNamesForStatus.has(act.name)) { seenNamesForStatus.add(act.name); uniqueActivitiesForStatus.push(act); }
+        });
+
+        const statusCounts = statusTypes.map(status => {
+          const actsInStatus = uniqueActivitiesForStatus.filter(a => a.status === status);
+          return { status, count: actsInStatus.length, activitiesList: actsInStatus };
+        });
+
+        return (
+          <div className="space-y-4 md:space-y-6 animate-in fade-in duration-300 pb-8">
+            <div className="bg-white shadow-sm md:shadow-md border border-gray-200 rounded-2xl md:rounded-lg overflow-hidden">
+              <div className="bg-purple-300 text-purple-900 text-center py-4 md:py-3 font-bold text-lg md:text-lg border-b border-purple-400">
+                {currentModeName}: {activeProject ? activeProject.projectName : '-'}
+              </div>
+              <div className="bg-purple-100 text-purple-800 text-center py-2.5 md:py-2 font-bold md:font-semibold border-b border-purple-200 text-sm">
+                การใช้จ่ายเงินตามประเภท
+              </div>
+              <div className="md:hidden text-[11px] text-gray-500 font-medium px-4 py-2 bg-gray-50 border-b border-gray-200 flex items-center gap-1">
+                <span className="animate-pulse flex items-center gap-1">↔ ปัดขึ้นลงเพื่อดูข้อมูลเพิ่มเติม</span>
+              </div>
+              <div className="hidden md:block table-container p-2 md:p-4">
+                <table className="min-w-table w-full text-sm text-right whitespace-nowrap border-collapse">
+                  <thead>
+                    <tr>
+                      <th className="border border-gray-300 p-3 md:p-2 bg-white min-w-[100px]"></th>
+                      {displayMoneyTypes.map((type, i) => <th key={i} className="border border-gray-400 p-3 md:p-2 bg-[#fde047] text-gray-800 font-bold text-center align-top min-w-[140px] whitespace-normal leading-tight">{type}</th>)}
+                      <th className="border border-gray-400 p-3 md:p-2 bg-[#fde047] text-gray-900 font-bold text-center min-w-[120px]">รวม</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td className="border border-gray-300 p-3 bg-[#4ade80] text-green-900 font-bold text-center">จัดสรร</td>
+                      {overviewData.map((data, i) => <td key={i} className="border border-gray-300 p-3 text-gray-800 bg-white">{formatCurrency(data.allocated)}</td>)}
+                      <td className="border border-gray-400 p-3 font-bold bg-gray-50 text-gray-900">{formatCurrency(totals.allocated)}</td>
+                    </tr>
+                    <tr>
+                      <td className="border border-gray-300 p-3 bg-[#fca5a5] text-red-900 font-bold text-center">ใช้ไป</td>
+                      {overviewData.map((data, i) => <td key={i} className="border border-gray-300 p-3 text-gray-800 bg-white">{formatCurrency(data.used)}</td>)}
+                      <td className="border border-gray-400 p-3 font-bold bg-gray-50 text-gray-900">{formatCurrency(totals.used)}</td>
+                    </tr>
+                    <tr>
+                      <td className="border border-gray-300 p-3 bg-[#22d3ee] text-cyan-900 font-bold text-center">คงเหลือ</td>
+                      {overviewData.map((data, i) => <td key={i} className="border border-gray-300 p-3 font-bold text-gray-800 bg-white">{formatCurrency(data.remaining)}</td>)}
+                      <td className="border border-gray-400 p-3 font-bold bg-gray-100 text-gray-900 text-lg">{formatCurrency(totals.remaining)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              
+              {/* Mobile Cards View สำหรับหน้าภาพรวมประเภทเงิน */}
+              <div className="md:hidden flex flex-col gap-3 p-3 bg-gray-50 border-t border-gray-200">
+                {overviewData.map((data, i) => (
+                  <div key={i} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 relative">
+                    <h4 className="font-bold text-gray-800 text-base mb-3 pb-2 border-b border-gray-100">{data.type}</h4>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between items-center px-1">
+                        <span className="text-gray-500 font-medium">จัดสรร:</span>
+                        <span className="font-bold text-green-600">{formatCurrency(data.allocated)} ฿</span>
+                      </div>
+                      <div className="flex justify-between items-center px-1">
+                        <span className="text-gray-500 font-medium">ใช้ไป:</span>
+                        <span className="font-bold text-red-500">{formatCurrency(data.used)} ฿</span>
+                      </div>
+                      <div className="flex justify-between items-center p-2.5 mt-2 bg-blue-50/50 rounded-lg border border-blue-50">
+                        <span className="text-gray-700 font-bold">คงเหลือ:</span>
+                        <span className="font-black text-blue-700 text-base">{formatCurrency(data.remaining)} ฿</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                
+                {/* สรุปรวมด้านล่างสุด */}
+                <div className="bg-gray-800 p-4 rounded-xl shadow-md text-white mt-2">
+                  <h4 className="font-bold text-center mb-3 text-base text-gray-200">รวมทุกประเภท</h4>
+                  <div className="flex justify-between items-center text-sm mb-1">
+                    <span className="text-gray-300">รวมจัดสรร:</span>
+                    <span className="font-bold text-green-400">{formatCurrency(totals.allocated)} ฿</span>
+                  </div>
+                  <div className="flex justify-between items-center text-sm mb-2">
+                    <span className="text-gray-300">รวมใช้ไป:</span>
+                    <span className="font-bold text-red-400">{formatCurrency(totals.used)} ฿</span>
+                  </div>
+                  <div className="flex justify-between items-center pt-2 border-t border-gray-600">
+                    <span className="font-bold text-white">รวมคงเหลือ:</span>
+                    <span className="font-black text-xl text-cyan-300">{formatCurrency(totals.remaining)} ฿</span>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+
+            <div className="bg-white border border-gray-200 rounded-2xl md:rounded-lg shadow-sm p-5 md:p-5">
+              <h3 className="text-gray-700 font-bold mb-4 border-b-2 border-indigo-400 pb-1 inline-block text-base">สรุปจำนวนกิจกรรมตามสถานะ</h3>
+              {/* เปลี่ยนตรงนี้ให้เป็น 1 คอลัมน์ บนมือถือ (grid-cols-1) */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+                {statusCounts.map((item, idx) => {
+                  let colorStyle = "bg-gray-50 border-gray-200 text-gray-700";
+                  if (item.status === 'ดำเนินการสำเร็จ' || item.status.includes('สำเร็จ')) colorStyle = "bg-green-50 border-green-200 text-green-800";
+                  else if (item.status === 'กำลังดำเนินการ' || item.status.includes('ระหว่าง')) colorStyle = "bg-blue-50 border-blue-200 text-blue-800";
+                  else if (item.status.includes('ยกเลิก') || item.status.includes('ลบ')) colorStyle = "bg-red-50 border-red-200 text-red-800";
+                  return (
+                    <div 
+                      key={idx} 
+                      onClick={() => setStatusDetailModal({ isOpen: true, status: item.status, activities: item.activitiesList })}
+                      className={`border rounded-xl md:rounded-lg p-5 md:p-4 flex flex-col items-center justify-center text-center shadow-sm transition-all active:scale-[0.97] md:active:scale-100 hover:-translate-y-1 hover:shadow-md cursor-pointer relative overflow-hidden group ${colorStyle}`}
+                    >
+                      <span className="text-xs sm:text-sm font-bold mb-2 leading-tight">{item.status}</span>
+                      <div className="flex items-end gap-1">
+                        <span className="text-3xl font-black">{item.count}</span>
+                        <span className="text-[10px] md:text-xs mb-1.5 opacity-70 font-medium">กิจกรรม</span>
+                      </div>
+                      <div className="text-[10px] mt-2 underline opacity-80 md:opacity-0 group-hover:opacity-100 transition-opacity flex items-center font-bold">คลิกดูรายชื่อ <ChevronRight size={12}/></div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 min-w-0">
+              <div className="bg-white border border-gray-200 rounded-2xl md:rounded-lg shadow-sm p-4 flex flex-col items-center min-h-[300px] md:min-h-[350px] min-w-0">
+                 <h3 className="text-gray-700 font-bold mb-2 md:mb-4 self-start border-b-2 border-green-400 pb-1 text-base md:text-base">สัดส่วนงบประมาณที่ได้รับการจัดสรร</h3>
+                 <div className="w-full flex-grow">
+                   <ResponsiveContainer width="100%" height={250}>
+                      <PieChart>
+                        <Pie data={chartAllocatedData} cx="50%" cy="50%" outerRadius="75%" dataKey="value" label={({percent}) => `${(percent * 100).toFixed(1)}%`}>
+                          {chartAllocatedData.map((_, i) => <Cell key={`cell-${i}`} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
+                        </Pie>
+                        <Tooltip formatter={(val) => formatCurrency(val) + ' บาท'} />
+                        <Legend verticalAlign="bottom" wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }}/>
+                      </PieChart>
+                    </ResponsiveContainer>
+                 </div>
+              </div>
+              <div className="bg-white border border-gray-200 rounded-2xl md:rounded-lg shadow-sm p-4 flex flex-col items-center min-h-[300px] md:min-h-[350px] min-w-0">
+                 <h3 className="text-gray-700 font-bold mb-2 md:mb-4 self-start border-b-2 border-red-400 pb-1 text-base md:text-base">สัดส่วนการใช้จ่ายแยกตามประเภทเงิน</h3>
+                 <div className="w-full flex-grow">
+                   <ResponsiveContainer width="100%" height={250}>
+                      <PieChart>
+                        <Pie data={chartUsedData} cx="50%" cy="50%" outerRadius="75%" dataKey="value" label={({percent}) => `${(percent * 100).toFixed(1)}%`}>
+                          {chartUsedData.map((_, i) => <Cell key={`cell-${i}`} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
+                        </Pie>
+                        <Tooltip formatter={(val) => formatCurrency(val) + ' บาท'} />
+                        <Legend verticalAlign="bottom" wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }}/>
+                      </PieChart>
+                    </ResponsiveContainer>
+                 </div>
+              </div>
+            </div>
+          </div>
+        );
+      };
+
+      return (
+        <div className="flex min-h-screen bg-gray-50 font-sans text-sm relative print:bg-white print:min-h-0 print:pb-0">
+          
+          <style>{`
+            :root { --app-primary: ${themeColors.primary}; }
+            .bg-app-primary { background-color: var(--app-primary) !important; }
+            .text-app-primary { color: var(--app-primary) !important; }
+            .border-app-primary { border-color: var(--app-primary) !important; }
+            .hover-bg-app-primary:hover { filter: brightness(0.9); }
+          `}</style>
+          
+          <datalist id="managementGroupsList">
+            <option value="วิชาการ" />
+            <option value="กิจการนักเรียน" />
+            <option value="งบประมาณ" />
+            <option value="งานบุคคล" />
+            <option value="ทั่วไป" />
+          </datalist>
+
+          {toastMessage && (
+            <div className="fixed top-safe right-4 md:top-6 md:right-6 bg-gray-800 text-white px-5 py-3.5 md:py-3 rounded-xl md:rounded-lg shadow-2xl z-[300] animate-in fade-in flex justify-between items-center gap-4 font-bold md:font-medium mt-4 md:mt-0 text-sm w-[calc(100%-2rem)] md:w-auto mx-auto left-0 md:left-auto">
+               <span>{toastMessage}</span>
+               <button onClick={() => setToastMessage('')} className="text-gray-300 hover:text-white p-1"><X size={18}/></button>
+            </div>
+          )}
+
+          {isSaving && (
+            <div className="fixed inset-0 bg-white/60 backdrop-blur-[2px] z-[250] flex items-center justify-center">
+              <div className="bg-white px-6 py-5 rounded-2xl shadow-2xl flex flex-col items-center gap-3 text-indigo-700 font-bold border border-indigo-100 scale-in-center">
+                <Loader2 className="animate-spin text-indigo-600" size={36} />
+                <span className="text-base">กำลังประมวลผลข้อมูล...</span>
+              </div>
+            </div>
+          )}
+          
+          {/* Backdrop สำหรับ Sidebar บนมือถือ */}
+          {isSidebarOpen && (
+            <div 
+              className="lg:hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] transition-opacity animate-in fade-in print:hidden"
+              onClick={() => setIsSidebarOpen(false)}
+            ></div>
+          )}
+
+          {/* Sidebar Drawer */}
+          <div className={`fixed left-0 top-0 h-full w-[280px] lg:w-64 bg-white border-r border-gray-200 shadow-2xl lg:shadow-[2px_0_15px_-3px_rgba(0,0,0,0.05)] z-[110] lg:z-40 flex flex-col transition-transform duration-300 print:hidden ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+            <div className="h-[60px] pt-safe flex items-center justify-between px-6 border-b border-gray-100 bg-white text-app-primary shrink-0 relative z-20">
+              <div className="flex items-center">
+                <AppLogo />
+                <span className="font-extrabold text-lg ml-3 tracking-tight">EduPlan System</span>
+              </div>
+              {/* ปุ่มปิด Sidebar บนมือถือ */}
+              <button onClick={() => setIsSidebarOpen(false)} className="lg:hidden text-gray-400 hover:text-gray-800 bg-gray-100 hover:bg-gray-200 p-1.5 rounded-lg transition-colors">
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Mode Switcher (Dropdown) */}
+            <div className="px-4 py-4 border-b border-gray-100 bg-gray-50">
+              <label className="block text-xs font-bold text-gray-500 mb-1.5 px-1">หมวดหมู่ระบบ</label>
+              <select
+                value={appMode}
+                onChange={(e) => { setAppMode(e.target.value); setActiveTab('dashboard'); }}
+                className="w-full bg-white border border-gray-300 text-indigo-700 rounded-xl px-4 py-2.5 outline-none cursor-pointer hover:border-indigo-400 transition-colors text-sm font-bold shadow-sm focus:ring-2 focus:ring-indigo-500/20"
+              >
+                {appModes.map(mode => (
+                  <option key={mode.id} value={mode.id} className="text-gray-800">{mode.name}</option>
+                ))}
+              </select>
+            </div>
+            
+            <div className="flex-1 py-4 flex flex-col gap-1 overflow-y-auto pb-safe">
+              <button onClick={() => handleSidebarMenuClick('dashboard')} className={`flex items-center w-full px-6 py-4 lg:py-3.5 transition-all duration-200 border-l-[5px] ${activeTab === 'dashboard' ? 'bg-indigo-50 text-indigo-700 border-indigo-600 font-bold' : 'border-transparent text-gray-500 hover:bg-gray-50 hover:text-gray-900 font-medium'}`} title="แดชบอร์ด">
+                <Home size={22} className="shrink-0 lg:w-5 lg:h-5" /> <span className="ml-3 truncate text-base lg:text-sm">แดชบอร์ด</span>
+              </button>
+              <button onClick={() => handleSidebarMenuClick('ledger')} className={`flex items-center w-full px-6 py-4 lg:py-3.5 transition-all duration-200 border-l-[5px] ${activeTab === 'ledger' ? 'bg-green-50 text-green-700 border-green-600 font-bold' : 'border-transparent text-gray-500 hover:bg-gray-50 hover:text-gray-900 font-medium'}`} title="บันทึกการใช้จ่าย">
+                <LayoutDashboard size={22} className="shrink-0 lg:w-5 lg:h-5" /> <span className="ml-3 truncate text-base lg:text-sm">บันทึกการใช้จ่าย</span>
+              </button>
+              <button onClick={() => handleSidebarMenuClick('summary')} className={`flex items-center w-full px-6 py-4 lg:py-3.5 transition-all duration-200 border-l-[5px] ${activeTab === 'summary' ? 'bg-yellow-50 text-yellow-700 border-yellow-500 font-bold' : 'border-transparent text-gray-500 hover:bg-gray-50 hover:text-gray-900 font-medium'}`} title="สรุปรายกิจกรรม">
+                <FileText size={22} className="shrink-0 lg:w-5 lg:h-5" /> <span className="ml-3 truncate text-base lg:text-sm">สรุปรายกิจกรรม</span>
+              </button>
+              <button onClick={() => handleSidebarMenuClick('overview')} className={`flex items-center w-full px-6 py-4 lg:py-3.5 transition-all duration-200 border-l-[5px] ${activeTab === 'overview' ? 'bg-purple-50 text-purple-700 border-purple-600 font-bold' : 'border-transparent text-gray-500 hover:bg-gray-50 hover:text-gray-900 font-medium'}`} title="ภาพรวมตามประเภทเงิน">
+                <PieChartIcon size={22} className="shrink-0 lg:w-5 lg:h-5" /> <span className="ml-3 truncate text-base lg:text-sm">ภาพรวมตามประเภทเงิน</span>
+              </button>
+            </div>
+            
+            {/* สถานะแอดมินใน Sidebar (สำหรับมือถือ) */}
+            <div className="p-4 border-t border-gray-100 pb-safe lg:hidden">
+               {!isAdmin ? (
+                  <button onClick={() => { setAuthModal({ isOpen: true, password: '', error: '' }); setIsSidebarOpen(false); }} className="w-full flex items-center justify-center gap-2 bg-app-primary text-white px-4 py-3.5 rounded-xl text-base font-bold shadow-sm">
+                    <Lock size={18} /> เข้าสู่ระบบ Admin
+                  </button>
+                ) : (
+                  <button onClick={() => { setIsAdmin(false); setIsSidebarOpen(false); }} className="w-full flex items-center justify-center gap-2 bg-yellow-100 text-yellow-800 px-4 py-3.5 rounded-xl text-base font-bold shadow-sm border border-yellow-300">
+                    <Unlock size={18} /> ออกจากระบบ
+                  </button>
+                )}
+            </div>
+          </div>
+
+          {/* Main Content Area */}
+          <div className={`flex-1 flex flex-col min-w-0 transition-all duration-300 pb-20 md:pb-0 ${isSidebarOpen ? 'lg:ml-64' : 'ml-0'} print:ml-0`}>
+            
+            {/* Top Header Section */}
+            <div className="sticky top-0 z-30 w-full print:hidden flex flex-col shadow-md">
+              {/* Topbar: สีหลัก (Primary Color) */}
+              <div className="bg-app-primary w-full min-h-[60px] py-2 flex items-center px-3 md:px-6 justify-between transition-all pt-safe">
+                <div className="flex items-center gap-2 md:gap-4 overflow-hidden flex-nowrap w-full">
+                  {/* ปุ่ม Hamburger */}
+                  <button
+                    onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+                    className="flex text-white hover:bg-white/20 p-2 rounded-lg transition-colors shrink-0 outline-none focus:ring-2 focus:ring-white/50"
+                    title="เปิด/ปิดเมนู"
+                  >
+                    <Menu size={24} />
+                  </button>
+                  
+                  <div className="lg:hidden flex items-center shrink-0 text-white mr-1">
+                    {activeProject && activeProject.logoUrl ? (
+                      <img src={activeProject.logoUrl} alt="Logo" className="h-7 w-auto max-w-[28px] object-contain rounded-sm bg-white p-0.5 shadow-sm" onError={(e) => { e.target.style.display = 'none'; }} />
+                    ) : (
+                      <Wallet size={22} />
+                    )}
+                  </div>
+                  
+                  {/* ชื่อโรงเรียนใน Topbar */}
+                  {schoolName && (
+                    <div className="hidden sm:flex items-center shrink min-w-0 pr-2">
+                      <span className="text-white font-bold md:font-extrabold text-base md:text-lg tracking-wide truncate" title={schoolName}>{schoolName}</span>
+                    </div>
+                  )}
+                </div>
+                
+                <div className="flex-shrink-0 ml-auto md:ml-4 hidden lg:flex items-center gap-2 py-1">
+                  {!isAdmin ? (
+                    <button onClick={() => setAuthModal({ isOpen: true, password: '', error: '' })} className="flex items-center gap-1.5 bg-white text-app-primary hover:bg-gray-100 px-4 py-2 rounded-lg text-sm font-bold transition-colors shadow-sm">
+                      <Lock size={16} /> <span>เข้าสู่ระบบ Admin</span>
+                    </button>
+                  ) : (
+                    <button onClick={() => setIsAdmin(false)} className="flex items-center gap-1.5 bg-yellow-400 hover:bg-yellow-500 text-yellow-900 px-4 py-2 rounded-lg text-sm font-bold transition-colors shadow-sm">
+                      <Unlock size={16} /> <span>ออกจากระบบ</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Sub-header: ระบบ Multi-Project Dropdown */}
+              <div className="bg-white border-b border-gray-200 py-2.5 px-3 md:px-6 flex items-center gap-3 overflow-x-auto scrollbar-hide">
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="text-gray-600 font-bold text-sm">กลุ่ม:</span>
+                  <select
+                    value={selectedGroupFilter}
+                    onChange={handleGroupFilterChange}
+                    className="bg-gray-50 border border-gray-300 text-gray-800 rounded-lg px-3 py-1.5 outline-none cursor-pointer hover:bg-gray-100 transition-colors text-sm font-medium min-w-[120px] focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="ALL">ทุกกลุ่ม</option>
+                    {uniqueGroups.map(g => (
+                      <option key={g} value={g}>{g}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="w-px h-5 bg-gray-300 mx-1 shrink-0"></div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="text-gray-600 font-bold text-sm">ชื่อ{currentModeName}:</span>
+                  <select
+                    value={selectedProjectId}
+                    onChange={(e) => setSelectedProjectId(e.target.value)}
+                    className="bg-blue-50 border border-blue-200 text-blue-800 rounded-lg px-3 py-1.5 outline-none cursor-pointer hover:bg-blue-100 transition-colors text-sm md:text-base font-bold min-w-[200px] max-w-[250px] md:max-w-md truncate focus:ring-2 focus:ring-blue-500 shadow-sm"
+                  >
+                    {filteredProjectsDropdown.map(p => (
+                      <option key={p.id} value={p.id}>{p.projectName}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div className="w-full max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 md:py-6 print:p-0 print:max-w-none">
+
+              {currentModeProjects.length === 0 ? (
+                <EmptyStateView />
+              ) : (
+                <>
+                  {/* Project Info Header */}
+                  {activeTab !== 'dashboard' && activeProject ? (
+                    <div className="bg-white rounded-2xl md:rounded-xl shadow-[0_2px_10px_rgba(0,0,0,0.03)] md:shadow-sm border border-gray-100 p-5 mb-4 md:mb-6 relative print:hidden">
+                      {isAdmin && (
+                        <button
+                          onClick={() => setSettingsModal({ 
+                            isOpen: true, 
+                            editProjectData: { ...activeProject }, 
+                            newProjectData: { projectName: '', managementGroup: '', responsible: '', plan: '', strategy: '', logoUrl: '' },
+                            colors: { ...themeColors }, 
+                            password: adminPassword, 
+                            schoolName: schoolName,
+                            activeTab: 'project-edit', 
+                            typeTab: 'money' 
+                          })}
+                          className="absolute top-4 right-4 text-gray-500 hover:text-blue-700 flex items-center gap-1.5 text-xs font-bold bg-gray-50 hover:bg-blue-50 px-3 py-2 rounded-xl md:rounded-lg transition-colors border border-gray-200 shadow-sm active:scale-95"
+                        >
+                          <Settings size={18} className="md:w-4 md:h-4" /> <span className="hidden sm:inline">ตั้งค่าระบบ</span>
+                        </button>
+                      )}
+                      <h2 className="text-base md:text-lg font-bold text-green-700 mb-3 md:mb-4 border-b pb-2 pr-12 sm:pr-24 lg:pr-32 flex items-center gap-2">
+                         <FolderOpen size={18} className="text-green-600 hidden sm:block" /> ข้อมูล{currentModeName}
+                      </h2>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-y-2.5 md:gap-y-3 gap-x-6 text-sm">
+                        <div className="flex items-start gap-2"><span className="font-semibold text-gray-500 whitespace-nowrap min-w-[80px]">ชื่อ{currentModeName}:</span> <span className="text-gray-900 font-bold md:font-medium">{activeProject.projectName}</span></div>
+                        <div className="flex items-start gap-2"><span className="font-semibold text-gray-500 whitespace-nowrap min-w-[80px]">กลุ่มบริหาร:</span> <span className="text-gray-900 font-bold md:font-medium">{activeProject.managementGroup || '-'}</span></div>
+                        <div className="flex items-start gap-2"><span className="font-semibold text-gray-500 whitespace-nowrap min-w-[80px]">ผู้รับผิดชอบ:</span> <span className="text-gray-900 font-bold md:font-medium">{activeProject.responsible}</span></div>
+                        <div className="flex items-start gap-2"><span className="font-semibold text-gray-500 whitespace-nowrap min-w-[80px]">แผนงาน:</span> <span className="text-gray-900 font-bold md:font-medium">{activeProject.plan}</span></div>
+                        <div className="flex items-start gap-2"><span className="font-semibold text-gray-500 whitespace-nowrap min-w-[80px]">กลยุทธ์ที่:</span> <span className="text-gray-900 font-bold md:font-medium">{activeProject.strategy}</span></div>
+                      </div>
+                    </div>
+                  ) : (
+                    isAdmin && activeProject && (
+                      <div className="flex justify-end mb-2 print:hidden relative z-10">
+                        <button
+                          onClick={() => setSettingsModal({ 
+                            isOpen: true, 
+                            editProjectData: { ...activeProject }, 
+                            newProjectData: { projectName: '', managementGroup: '', responsible: '', plan: '', strategy: '', logoUrl: '' },
+                            colors: { ...themeColors }, 
+                            password: adminPassword, 
+                            schoolName: schoolName,
+                            activeTab: 'project-edit', 
+                            typeTab: 'money' 
+                          })}
+                          className="text-gray-500 hover:text-blue-700 flex items-center gap-1.5 text-xs font-bold bg-white hover:bg-blue-50 px-3 py-2 rounded-xl md:rounded-lg transition-colors border border-gray-200 shadow-sm active:scale-95"
+                        >
+                          <Settings size={18} className="md:w-4 md:h-4" /> <span className="hidden sm:inline">ตั้งค่าระบบ</span>
+                        </button>
+                      </div>
+                    )
+                  )}
+
+                  {/* การ Render หน้าต่างๆ */}
+                  {activeTab === 'dashboard' && <GlobalDashboardView />}
+                  {activeTab === 'ledger' && <LedgerView />}
+                  {activeTab === 'summary' && <SummaryView />}
+                  {activeTab === 'overview' && <OverviewByTypeView />}
+                </>
+              )}
+              
+              <div className="mt-8 md:mt-12 text-center text-gray-400 text-xs md:text-sm font-medium print:hidden">
+                ครูสันติ มีจันทร์ ผู้พัฒนาระบบ EduPlan System
+              </div>
+            </div>
+            
+            {/* Mobile Bottom Navigation Bar */}
+            <div className="md:hidden print:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 flex justify-around items-center h-[68px] pb-safe z-40 shadow-[0_-4px_15px_rgba(0,0,0,0.05)] pt-1 px-1">
+              <button onClick={() => setActiveTab('dashboard')} className={`flex flex-col items-center justify-center w-full h-full gap-1 transition-colors relative ${activeTab === 'dashboard' ? 'text-indigo-600' : 'text-gray-400 hover:text-gray-600'}`}>
+                {activeTab === 'dashboard' && <div className="absolute top-0 w-8 h-1 bg-indigo-600 rounded-b-full"></div>}
+                <Home size={24} className={activeTab === 'dashboard' ? 'stroke-[2.5px] mt-1' : 'stroke-2 mt-1'} />
+                <span className="text-[10px] font-bold">แดชบอร์ด</span>
+              </button>
+              <button onClick={() => setActiveTab('ledger')} disabled={currentModeProjects.length===0} className={`flex flex-col items-center justify-center w-full h-full gap-1 transition-colors relative disabled:opacity-30 ${activeTab === 'ledger' ? 'text-green-600' : 'text-gray-400 hover:text-gray-600'}`}>
+                {activeTab === 'ledger' && <div className="absolute top-0 w-8 h-1 bg-green-600 rounded-b-full"></div>}
+                <LayoutDashboard size={24} className={activeTab === 'ledger' ? 'stroke-[2.5px] mt-1' : 'stroke-2 mt-1'} />
+                <span className="text-[10px] font-bold">บันทึก</span>
+              </button>
+              <button onClick={() => setActiveTab('summary')} disabled={currentModeProjects.length===0} className={`flex flex-col items-center justify-center w-full h-full gap-1 transition-colors relative disabled:opacity-30 ${activeTab === 'summary' ? 'text-yellow-600' : 'text-gray-400 hover:text-gray-600'}`}>
+                {activeTab === 'summary' && <div className="absolute top-0 w-8 h-1 bg-yellow-500 rounded-b-full"></div>}
+                <FileText size={24} className={activeTab === 'summary' ? 'stroke-[2.5px] mt-1' : 'stroke-2 mt-1'} />
+                <span className="text-[10px] font-bold">สรุป</span>
+              </button>
+              <button onClick={() => setActiveTab('overview')} disabled={currentModeProjects.length===0} className={`flex flex-col items-center justify-center w-full h-full gap-1 transition-colors relative disabled:opacity-30 ${activeTab === 'overview' ? 'text-purple-600' : 'text-gray-400 hover:text-gray-600'}`}>
+                {activeTab === 'overview' && <div className="absolute top-0 w-8 h-1 bg-purple-600 rounded-b-full"></div>}
+                <PieChartIcon size={24} className={activeTab === 'overview' ? 'stroke-[2.5px] mt-1' : 'stroke-2 mt-1'} />
+                <span className="text-[10px] font-bold">ภาพรวม</span>
+              </button>
+            </div>
+
+          </div>
+
+          {/* ================= MODALS ================= */}
+
+          {authModal.isOpen && (
+            <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[400] p-4 animate-in fade-in pb-safe">
+              <div className="bg-white rounded-3xl shadow-2xl max-w-sm w-full overflow-hidden scale-in-center">
+                <div className="bg-gradient-to-r from-green-600 to-green-500 p-6 flex flex-col items-center gap-3 text-white">
+                  <div className="bg-white/20 p-4 rounded-full"><KeyRound size={40} /></div>
+                  <h3 className="font-bold text-2xl">เข้าสู่ระบบผู้ดูแล</h3>
+                  <p className="text-green-100 text-sm text-center px-4">กรุณาใส่รหัสผ่านเพื่อแก้ไขหรือตั้งค่าข้อมูล</p>
+                </div>
+                <div className="p-6 space-y-6">
+                  <div>
+                    <label className="block text-gray-700 text-sm font-bold mb-2">รหัสผ่าน</label>
+                    <input type="password" autoFocus className="w-full px-5 py-4 border border-gray-300 rounded-2xl focus:outline-none focus:ring-2 focus:ring-green-500 text-lg text-center tracking-widest" placeholder="••••••••" value={authModal.password} onChange={(e) => setAuthModal({ ...authModal, password: e.target.value, error: '' })} onKeyDown={(e) => e.key === 'Enter' && handleLogin()}/>
+                    {authModal.error && <p className="text-red-500 text-xs mt-2 font-bold flex items-center justify-center gap-1"><AlertCircle size={14}/> {authModal.error}</p>}
+                  </div>
+                  <div className="flex flex-col gap-3 pt-2">
+                    <button onClick={handleLogin} className="w-full py-4 bg-green-500 text-white rounded-2xl hover:bg-green-600 font-bold text-base shadow-md transition-colors flex justify-center items-center gap-2 active:scale-95"><Unlock size={20}/> ยืนยันรหัสผ่าน</button>
+                    <button onClick={() => setAuthModal({ isOpen: false, password: '', error: '' })} className="w-full py-3 bg-gray-100 text-gray-600 rounded-2xl hover:bg-gray-200 font-bold transition-colors active:scale-95">ยกเลิก</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {confirmModal.isOpen && (
+            <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[400] p-4 animate-in fade-in pb-safe">
+              <div className="bg-white rounded-3xl shadow-2xl max-w-sm w-full overflow-hidden scale-in-center">
+                <div className="bg-red-500 p-6 flex items-center gap-3 text-white"><AlertCircle size={32} /><h3 className="font-bold text-xl">{confirmModal.title}</h3></div>
+                <div className="p-6 text-gray-700 text-base leading-relaxed font-medium">{confirmModal.message}</div>
+                <div className="bg-gray-50 p-5 flex flex-col-reverse sm:flex-row justify-end gap-3 border-t border-gray-200">
+                  <button onClick={() => setConfirmModal({ isOpen: false })} className="w-full sm:w-auto px-6 py-3.5 bg-white border border-gray-300 text-gray-700 rounded-2xl md:rounded-xl hover:bg-gray-100 font-bold active:scale-95">ยกเลิก</button>
+                  <button onClick={confirmModal.onConfirm} className="w-full sm:w-auto px-6 py-3.5 bg-red-500 text-white rounded-2xl md:rounded-xl hover:bg-red-600 font-bold shadow-sm active:scale-95">ยืนยัน</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {statusDetailModal.isOpen && (
+            <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[400] p-3 sm:p-4 animate-in fade-in pb-safe">
+              <div className="bg-white rounded-3xl md:rounded-2xl shadow-2xl max-w-4xl w-full overflow-hidden scale-in-center flex flex-col max-h-[85vh]">
+                <div className="bg-blue-600 p-5 flex items-center justify-between text-white shrink-0">
+                  <h3 className="font-bold text-lg flex items-center gap-2 truncate">
+                    <ListOrdered size={22} className="shrink-0" /> <span className="truncate">รายการกิจกรรม (สถานะ: {statusDetailModal.status})</span>
+                  </h3>
+                  <button onClick={() => setStatusDetailModal({ isOpen: false, status: '', activities: [] })} className="text-blue-100 hover:text-white bg-blue-700 hover:bg-blue-800 p-2 rounded-xl transition-colors shrink-0">
+                    <X size={20} />
+                  </button>
+                </div>
+                
+                <div className="p-0 overflow-y-auto w-full flex-grow">
+                  <table className="w-full text-sm text-left whitespace-nowrap md:whitespace-normal">
+                    <thead className="bg-gray-100 sticky top-0 shadow-sm z-10">
+                      <tr>
+                        <th className="px-4 py-3.5 text-gray-700 font-bold border-b border-gray-200 w-10 text-center">ที่</th>
+                        <th className="px-4 py-3.5 text-gray-700 font-bold border-b border-gray-200">ชื่อกิจกรรม</th>
+                        <th className="px-4 py-3.5 text-gray-700 font-bold border-b border-gray-200 w-32">ผู้รับผิดชอบ</th>
+                        <th className="px-4 py-3.5 text-right text-gray-700 font-bold border-b border-gray-200 w-32">งบประมาณที่จัดสรร</th>
+                        <th className="px-4 py-3.5 text-right text-gray-700 font-bold border-b border-gray-200 w-32">ใช้ไป</th>
+                        <th className="px-4 py-3.5 text-right text-gray-700 font-bold border-b border-gray-200 w-32">คงเหลือ</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {statusDetailModal.activities.length > 0 ? (
+                        statusDetailModal.activities.map((act, index) => {
+                          // รวมยอดงบประมาณทุกรายการที่มีชื่อกิจกรรมเดียวกัน
+                          const allActsWithSameName = activities.filter(a => a.name === act.name);
+                          const totalAllocatedForAct = allActsWithSameName.reduce((sum, a) => sum + Number(a.allocatedBudget), 0);
+
+                          // รวมยอดเบิกจ่ายทุกรายการที่ผูกกับกิจกรรมชื่อนี้ (ผ่าน activityId ทั้งหมดของชื่อนี้)
+                          const actIds = allActsWithSameName.map(a => a.id);
+                          const actExpenses = expenses.filter(e => actIds.includes(e.activityId));
+                          const usedAmount = actExpenses.reduce((sum, e) => sum + Number(e.amount), 0);
+                          
+                          const remainingAmount = totalAllocatedForAct - usedAmount;
+
+                          return (
+                            <tr key={act.id} className="hover:bg-blue-50 transition-colors bg-white">
+                              <td className="px-4 py-4 text-gray-500 text-center font-medium">{index + 1}</td>
+                              <td className="px-4 py-4 font-bold text-gray-800 whitespace-normal min-w-[150px]">{act.name}</td>
+                              <td className="px-4 py-4 text-gray-600 font-medium">{act.responsible || '-'}</td>
+                              <td className="px-4 py-4 text-right text-blue-600 font-black whitespace-nowrap text-base">{formatCurrency(totalAllocatedForAct)}</td>
+                              <td className="px-4 py-4 text-right text-red-500 font-bold whitespace-nowrap">{formatCurrency(usedAmount)}</td>
+                              <td className="px-4 py-4 text-right text-green-600 font-black whitespace-nowrap">{formatCurrency(remainingAmount)}</td>
+                            </tr>
+                          );
+                        })
+                      ) : (
+                        <tr>
+                          <td colSpan="6" className="px-4 py-12 text-center text-gray-400 font-medium text-base">ไม่มีกิจกรรมที่อยู่ในสถานะนี้</td>
+                        </tr>
+                      )}
+                    </tbody>
+                    {/* แถบสรุปยอดรวมด้านล่างตาราง */}
+                    {statusDetailModal.activities.length > 0 && (
+                      <tfoot className="bg-gray-50 sticky bottom-0 border-t-2 border-gray-200">
+                        {(() => {
+                           const totalAlloc = statusDetailModal.activities.reduce((sum, a) => {
+                               const allActsWithSameName = activities.filter(act => act.name === a.name);
+                               return sum + allActsWithSameName.reduce((s, act) => s + Number(act.allocatedBudget), 0);
+                           }, 0);
+                           const totalUsed = statusDetailModal.activities.reduce((sum, a) => {
+                               const allActsWithSameName = activities.filter(act => act.name === a.name);
+                               const actIds = allActsWithSameName.map(act => act.id);
+                               const e = expenses.filter(ex => actIds.includes(ex.activityId));
+                               return sum + e.reduce((s, ex) => s + Number(ex.amount), 0);
+                           }, 0);
+                           const totalRem = totalAlloc - totalUsed;
+                           return (
+                             <tr>
+                               <td colSpan="3" className="px-4 py-3 text-right font-bold text-gray-700">รวมทั้งหมด:</td>
+                               <td className="px-4 py-3 text-right font-black text-blue-700 text-base">{formatCurrency(totalAlloc)}</td>
+                               <td className="px-4 py-3 text-right font-bold text-red-600 text-base">{formatCurrency(totalUsed)}</td>
+                               <td className="px-4 py-3 text-right font-black text-green-700 text-base">{formatCurrency(totalRem)}</td>
+                             </tr>
+                           );
+                        })()}
+                      </tfoot>
+                    )}
+                  </table>
+                </div>
+
+                <div className="bg-white p-4 border-t border-gray-200 shrink-0 flex flex-col sm:flex-row justify-between items-center gap-4">
+                   <div className="text-sm text-gray-500 font-bold">จำนวนกิจกรรม: <span className="text-gray-900 font-black text-2xl mx-1.5">{statusDetailModal.activities.length}</span> รายการ</div>
+                   <button onClick={() => setStatusDetailModal({ isOpen: false, status: '', activities: [] })} className="w-full sm:w-auto px-8 py-3.5 bg-gray-100 border border-gray-300 text-gray-700 rounded-2xl md:rounded-xl hover:bg-gray-200 font-bold shadow-sm transition-colors active:scale-95">ปิดหน้าต่าง</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {settingsModal.isOpen && (
+            <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[400] p-4 animate-in fade-in pb-safe">
+              <div className="bg-white rounded-2xl md:rounded-3xl shadow-2xl w-full max-w-3xl max-h-[85vh] md:max-h-[90vh] flex flex-col overflow-hidden scale-in-center">
+                
+                <div className="bg-blue-600 p-5 flex items-center justify-between text-white shrink-0">
+                  <div className="flex items-center gap-3"><Settings size={24} /><h3 className="font-bold text-xl text-white">ตั้งค่าและจัดการระบบ</h3></div>
+                  <button onClick={() => setSettingsModal({...settingsModal, isOpen: false})} className="text-blue-100 hover:text-white bg-blue-700 hover:bg-blue-800 p-2 rounded-xl transition-colors"><X size={22}/></button>
+                </div>
+                
+                <div className="flex border-b border-gray-200 bg-gray-50 shrink-0 overflow-x-auto whitespace-nowrap scrollbar-hide">
+                  {currentModeProjects.length > 0 && <button className={`px-5 py-4 text-sm font-bold text-center transition-colors flex items-center gap-2 ${settingsModal.activeTab === 'project-edit' ? 'text-blue-600 border-b-[3px] border-blue-600 bg-white' : 'text-gray-500 hover:bg-gray-100 border-b-[3px] border-transparent'}`} onClick={() => setSettingsModal({ ...settingsModal, activeTab: 'project-edit' })}><Edit size={18}/> แก้ไข{currentModeName}</button>}
+                  <button className={`px-5 py-4 text-sm font-bold text-center transition-colors flex items-center gap-2 ${settingsModal.activeTab === 'project-new' ? 'text-blue-600 border-b-[3px] border-blue-600 bg-white' : 'text-gray-500 hover:bg-gray-100 border-b-[3px] border-transparent'}`} onClick={() => setSettingsModal({ ...settingsModal, activeTab: 'project-new' })}><FolderPlus size={18}/> สร้าง{currentModeName}ใหม่</button>
+                  <button className={`px-5 py-4 text-sm font-bold text-center transition-colors ${settingsModal.activeTab === 'general' ? 'text-blue-600 border-b-[3px] border-blue-600 bg-white' : 'text-gray-500 hover:bg-gray-100 border-b-[3px] border-transparent'}`} onClick={() => setSettingsModal({ ...settingsModal, activeTab: 'general' })}>ทั่วไป / สีสัน</button>
+                  <button className={`px-5 py-4 text-sm font-bold text-center transition-colors ${settingsModal.activeTab === 'types' ? 'text-blue-600 border-b-[3px] border-blue-600 bg-white' : 'text-gray-500 hover:bg-gray-100 border-b-[3px] border-transparent'}`} onClick={() => setSettingsModal({ ...settingsModal, activeTab: 'types' })}>ประเภทข้อมูล</button>
+                  <button className={`px-5 py-4 text-sm font-bold text-center transition-colors flex items-center gap-2 ${settingsModal.activeTab === 'security' ? 'text-red-600 border-b-[3px] border-red-600 bg-white' : 'text-gray-500 hover:bg-gray-100 border-b-[3px] border-transparent'}`} onClick={() => setSettingsModal({ ...settingsModal, activeTab: 'security' })}><ShieldAlert size={18}/> ความปลอดภัย</button>
+                </div>
+
+                <div className="p-5 sm:p-6 overflow-y-auto flex-grow">
+                  
+                  {settingsModal.activeTab === 'project-edit' && activeProject && (
+                    <div className="space-y-4 animate-in fade-in">
+                      <div className="bg-blue-50 border border-blue-200 text-blue-800 p-4 rounded-2xl text-sm flex items-center gap-3 mb-5 font-medium">
+                        <FolderOpen size={22} className="shrink-0" /> 
+                        <span>{currentModeName}ที่กำลังแก้ไข: <strong className="text-base">{activeProject.projectName}</strong></span>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="md:col-span-2"><label className="block text-gray-700 text-sm font-bold mb-1.5">ชื่อ{currentModeName}</label><input type="text" className="w-full px-4 py-3.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 text-base" value={settingsModal.editProjectData.projectName || ''} onChange={e => setSettingsModal({...settingsModal, editProjectData: {...settingsModal.editProjectData, projectName: e.target.value}})} /></div>
+                        <div>
+                          <label className="block text-gray-700 text-sm font-bold mb-1.5">กลุ่มบริหาร</label>
+                          <input type="text" list="managementGroupsList" placeholder="เช่น บริหารวิชาการ" className="w-full px-4 py-3.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 text-base" value={settingsModal.editProjectData.managementGroup || ''} onChange={e => setSettingsModal({...settingsModal, editProjectData: {...settingsModal.editProjectData, managementGroup: e.target.value}})} />
+                        </div>
+                        <div><label className="block text-gray-700 text-sm font-bold mb-1.5">ผู้รับผิดชอบ</label><input type="text" className="w-full px-4 py-3.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 text-base" value={settingsModal.editProjectData.responsible || ''} onChange={e => setSettingsModal({...settingsModal, editProjectData: {...settingsModal.editProjectData, responsible: e.target.value}})} /></div>
+                        <div><label className="block text-gray-700 text-sm font-bold mb-1.5">แผนงาน</label><input type="text" className="w-full px-4 py-3.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 text-base" value={settingsModal.editProjectData.plan || ''} onChange={e => setSettingsModal({...settingsModal, editProjectData: {...settingsModal.editProjectData, plan: e.target.value}})} /></div>
+                        <div><label className="block text-gray-700 text-sm font-bold mb-1.5">กลยุทธ์ที่</label><input type="text" className="w-full px-4 py-3.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 text-base" value={settingsModal.editProjectData.strategy || ''} onChange={e => setSettingsModal({...settingsModal, editProjectData: {...settingsModal.editProjectData, strategy: e.target.value}})} /></div>
+                        <div className="md:col-span-2">
+                          <label className="block text-gray-700 text-sm font-bold mb-1.5">ลิงก์รูปโลโก้ (URL)</label>
+                          <input type="text" placeholder="https://..." className="w-full px-4 py-3.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 text-sm" value={settingsModal.editProjectData.logoUrl || ''} onChange={e => setSettingsModal({...settingsModal, editProjectData: {...settingsModal.editProjectData, logoUrl: e.target.value}})} />
+                        </div>
+                      </div>
+                      
+                      {currentModeProjects.length > 0 && (
+                        <div className="mt-8 pt-6 border-t border-gray-200">
+                          <div className="bg-red-50 p-6 rounded-2xl border border-red-200 flex flex-col md:flex-row items-center justify-between gap-4">
+                            <div>
+                              <h4 className="text-red-700 font-black mb-1 flex items-center gap-2 text-base"><AlertCircle size={18} /> ลบรายการนี้</h4>
+                              <p className="text-sm text-red-600 font-medium">คำเตือน: หากลบ ข้อมูลกิจกรรมและรายจ่ายทั้งหมดในรายการนี้จะถูกลบออกจากชีทอย่างถาวร!</p>
+                            </div>
+                            <button 
+                              onClick={() => {
+                                setConfirmModal({
+                                  isOpen: true, title: 'ยืนยันการลบและข้อมูลทั้งหมด',
+                                  message: `คุณแน่ใจหรือไม่ว่าต้องการลบ "${activeProject.projectName}" ? ข้อมูลทั้งหมดจะหายไปอย่างถาวร!`,
+                                  onConfirm: async () => {
+                                    setIsSaving(true);
+                                    setConfirmModal({ isOpen: false });
+                                    try {
+                                      // 1. ค้นหากิจกรรมทั้งหมดที่อยู่ในโครงการนี้
+                                      const actsToDelete = allActivities.filter(a => a.projectId === activeProject.projectName || a.projectId === activeProject.id || (!a.projectId && activeProject.id === 'default'));
+                                      
+                                      // 2. ทยอยสั่งลบกิจกรรมทีละรายการ (backend จะทำการลบรายจ่ายที่เกี่ยวข้องให้อัตโนมัติ)
+                                      for (const act of actsToDelete) {
+                                        await api.call('deleteActivity', act.id);
+                                      }
+
+                                      // 3. อัปเดตลบรายชื่อโครงการออกจาก Config
+                                      const updatedProjects = projects.filter(p => p.id !== activeProject.id);
+                                      await api.call('saveConfigItem', 'projects', JSON.stringify(updatedProjects));
+                                      
+                                      // 4. อัปเดตข้อมูลบนหน้าจอ
+                                      setProjects(updatedProjects);
+                                      
+                                      const deletedActIds = actsToDelete.map(a => a.id);
+                                      setAllActivities(allActivities.filter(a => !deletedActIds.includes(a.id)));
+                                      setAllExpenses(allExpenses.filter(e => !deletedActIds.includes(e.activityId)));
+
+                                      setSettingsModal({...settingsModal, isOpen: false});
+                                      showToast("ลบข้อมูลสำเร็จ");
+                                    } catch(e) { showToast("เกิดข้อผิดพลาดในการลบข้อมูล"); }
+                                    setIsSaving(false);
+                                  }
+                                });
+                              }}
+                              className="w-full md:w-auto bg-white text-red-600 border-2 border-red-300 hover:border-red-600 hover:bg-red-50 px-6 py-2.5 rounded-xl font-bold text-sm transition-colors flex items-center justify-center gap-2 active:scale-95 shrink-0"
+                            >
+                              <Trash2 size={18} /> ลบ{currentModeName}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {settingsModal.activeTab === 'project-new' && (
+                    <div className="space-y-4 animate-in fade-in bg-gray-50 p-5 md:p-6 border border-gray-200 rounded-2xl">
+                      <h4 className="font-bold text-gray-800 border-b border-gray-200 pb-3 mb-5 text-lg">เพิ่ม{currentModeName}ใหม่เข้าสู่ระบบ</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="md:col-span-2"><label className="block text-gray-700 text-sm font-bold mb-1.5">ชื่อ{currentModeName} <span className="text-red-500">*</span></label><input type="text" placeholder={appMode === 'NORMAL' ? "เช่น (2569) โครงการอาหารกลางวัน" : "เช่น ค่าสาธารณูปโภค"} className="w-full px-4 py-3.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 text-base" value={settingsModal.newProjectData.projectName || ''} onChange={e => setSettingsModal({...settingsModal, newProjectData: {...settingsModal.newProjectData, projectName: e.target.value}})} /></div>
+                        <div>
+                          <label className="block text-gray-700 text-sm font-bold mb-1.5">กลุ่มบริหาร</label>
+                          <input type="text" list="managementGroupsList" placeholder="เช่น บริหารวิชาการ" className="w-full px-4 py-3.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 text-base" value={settingsModal.newProjectData.managementGroup || ''} onChange={e => setSettingsModal({...settingsModal, newProjectData: {...settingsModal.newProjectData, managementGroup: e.target.value}})} />
+                        </div>
+                        <div><label className="block text-gray-700 text-sm font-bold mb-1.5">ผู้รับผิดชอบ</label><input type="text" className="w-full px-4 py-3.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 text-base" value={settingsModal.newProjectData.responsible || ''} onChange={e => setSettingsModal({...settingsModal, newProjectData: {...settingsModal.newProjectData, responsible: e.target.value}})} /></div>
+                        <div><label className="block text-gray-700 text-sm font-bold mb-1.5">แผนงาน</label><input type="text" className="w-full px-4 py-3.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 text-base" value={settingsModal.newProjectData.plan || ''} onChange={e => setSettingsModal({...settingsModal, newProjectData: {...settingsModal.newProjectData, plan: e.target.value}})} /></div>
+                        <div><label className="block text-gray-700 text-sm font-bold mb-1.5">กลยุทธ์ที่</label><input type="text" className="w-full px-4 py-3.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 text-base" value={settingsModal.newProjectData.strategy || ''} onChange={e => setSettingsModal({...settingsModal, newProjectData: {...settingsModal.newProjectData, strategy: e.target.value}})} /></div>
+                        <div className="md:col-span-2">
+                          <label className="block text-gray-700 text-sm font-bold mb-1.5">ลิงก์รูปโลโก้ (URL)</label>
+                          <input type="text" placeholder="https://..." className="w-full px-4 py-3.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 text-sm" value={settingsModal.newProjectData.logoUrl || ''} onChange={e => setSettingsModal({...settingsModal, newProjectData: {...settingsModal.newProjectData, logoUrl: e.target.value}})} />
+                        </div>
+                      </div>
+                      <div className="pt-5 text-right">
+                        <button 
+                          onClick={async () => {
+                            if(!settingsModal.newProjectData.projectName) { showToast(`กรุณาระบุชื่อ${currentModeName}`); return; }
+                            setIsSaving(true);
+                            try {
+                              const newProj = { id: `proj-${Date.now()}`, ...settingsModal.newProjectData, projectType: appMode };
+                              const updatedProjects = [...projects, newProj];
+                              await api.call('saveConfigItem', 'projects', JSON.stringify(updatedProjects));
+                              setProjects(updatedProjects);
+                              setSelectedProjectId(newProj.id);
+                              setSettingsModal({...settingsModal, isOpen: false, newProjectData: { projectName: '', managementGroup: '', responsible: '', plan: '', strategy: '', logoUrl: '' }});
+                              showToast(`สร้าง${currentModeName}ใหม่สำเร็จ`);
+                            } catch (e) { showToast("สร้างข้อมูลล้มเหลว"); }
+                            setIsSaving(false);
+                          }}
+                          className="bg-green-600 hover:bg-green-700 text-white font-bold py-4 px-8 rounded-2xl shadow-md w-full md:w-auto transition-colors text-base active:scale-95"
+                        >
+                          บันทึกและสร้างใหม่
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {settingsModal.activeTab === 'general' && (
+                    <div className="space-y-6 animate-in fade-in">
+                      <div className="bg-gray-50 p-6 rounded-2xl border border-gray-200">
+                        <label className="block text-gray-800 text-base font-bold mb-3 border-b border-gray-200 pb-3">ชื่อโรงเรียน / องค์กร (แสดงด้านบนสุด)</label>
+                        <input 
+                          type="text" 
+                          className="w-full px-5 py-3.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 font-bold text-lg" 
+                          value={settingsModal.schoolName || ''} 
+                          onChange={e => setSettingsModal({...settingsModal, schoolName: e.target.value})} 
+                          placeholder="" 
+                        />
+                      </div>
+                      <div className="bg-gray-50 p-6 rounded-2xl border border-gray-200">
+                        <label className="block text-gray-800 text-base font-bold mb-4 border-b border-gray-200 pb-3">สีหลักของแอปพลิเคชัน (แถบเมนูด้านบน)</label>
+                        <div className="flex items-center gap-5 bg-white p-4 rounded-xl border border-gray-100">
+                          <input type="color" className="w-20 h-16 rounded-lg cursor-pointer border-0 p-0 shadow-sm" value={settingsModal.colors.primary || '#16a34a'} onChange={e => setSettingsModal({...settingsModal, colors: {...settingsModal.colors, primary: e.target.value}})} />
+                          <div className="text-sm font-bold text-gray-600">คลิกที่กล่องเพื่อเลือกสี<br/><span className="font-mono font-bold text-gray-900 text-lg">{settingsModal.colors.primary}</span></div>
+                        </div>
+                      </div>
+                      <div className="bg-gray-50 p-6 rounded-2xl border border-gray-200 space-y-5">
+                        <label className="block text-gray-800 text-base font-bold mb-3 border-b border-gray-200 pb-3">สีแผนภูมิวงกลม (หน้าสรุปรายกิจกรรม)</label>
+                        <div className="flex items-center gap-5 bg-white p-4 rounded-xl border border-gray-100">
+                          <input type="color" className="w-16 h-16 rounded-lg cursor-pointer border-0 p-0 shadow-sm" value={settingsModal.colors.chartExpense || '#ec4899'} onChange={e => setSettingsModal({...settingsModal, colors: {...settingsModal.colors, chartExpense: e.target.value}})} />
+                          <div className="text-base font-bold text-gray-700 flex-1">สีส่วน <span className="font-black text-pink-600">"รายจ่าย / โยกเงิน"</span></div>
+                        </div>
+                        <div className="flex items-center gap-5 bg-white p-4 rounded-xl border border-gray-100">
+                          <input type="color" className="w-16 h-16 rounded-lg cursor-pointer border-0 p-0 shadow-sm" value={settingsModal.colors.chartRemaining || '#10b981'} onChange={e => setSettingsModal({...settingsModal, colors: {...settingsModal.colors, chartRemaining: e.target.value}})} />
+                          <div className="text-base font-bold text-gray-700 flex-1">สีส่วน <span className="font-black text-emerald-600">"ยอดคงเหลือ"</span></div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {settingsModal.activeTab === 'types' && (
+                    <div className="animate-in fade-in h-full flex flex-col">
+                       <div className="flex border-b border-gray-200 mb-5 overflow-x-auto scrollbar-hide">
+                         <button className={`pb-3 px-5 text-base md:text-sm font-bold transition-colors whitespace-nowrap ${settingsModal.typeTab === 'money' ? 'text-blue-600 border-b-[3px] border-blue-600' : 'text-gray-500 hover:text-gray-800'}`} onClick={() => setSettingsModal({ ...settingsModal, typeTab: 'money' })}>ประเภทเงิน</button>
+                         <button className={`pb-3 px-5 text-base md:text-sm font-bold transition-colors whitespace-nowrap ${settingsModal.typeTab === 'expense' ? 'text-blue-600 border-b-[3px] border-blue-600' : 'text-gray-500 hover:text-gray-800'}`} onClick={() => setSettingsModal({ ...settingsModal, typeTab: 'expense' })}>ประเภทรายการ</button>
+                         <button className={`pb-3 px-5 text-base md:text-sm font-bold transition-colors whitespace-nowrap ${settingsModal.typeTab === 'status' ? 'text-blue-600 border-b-[3px] border-blue-600' : 'text-gray-500 hover:text-gray-800'}`} onClick={() => setSettingsModal({ ...settingsModal, typeTab: 'status' })}>สถานะกิจกรรม</button>
+                         <button className={`pb-3 px-5 text-base md:text-sm font-bold transition-colors whitespace-nowrap ${settingsModal.typeTab === 'modes' ? 'text-blue-600 border-b-[3px] border-blue-600' : 'text-gray-500 hover:text-gray-800'}`} onClick={() => setSettingsModal({ ...settingsModal, typeTab: 'modes' })}>ปุ่มแถบเมนู (โหมด)</button>
+                       </div>
+                       
+                       {settingsModal.typeTab === 'modes' ? (
+                         <>
+                           <div className="flex flex-col sm:flex-row gap-3 mb-5 bg-gray-50 p-4 sm:p-5 rounded-2xl border border-gray-200">
+                             <input type="text" placeholder="พิมพ์ชื่อปุ่มเมนูที่ต้องการเพิ่ม... (กด Enter)" className="flex-grow px-5 py-3.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 text-base outline-none" value={newTypeInput} onChange={(e) => setNewTypeInput(e.target.value)}
+                               onKeyDown={async (e) => {
+                                 if (e.key === 'Enter' && newTypeInput.trim()) {
+                                   const val = newTypeInput.trim();
+                                   setIsSaving(true);
+                                   try {
+                                     const newMode = { id: `MODE-${Date.now()}`, name: val };
+                                     const newArr = [...appModes, newMode];
+                                     setAppModes(newArr);
+                                     await api.call('saveConfigItem', 'appModes', JSON.stringify(newArr));
+                                     setNewTypeInput(''); showToast("เพิ่มปุ่มโหมดสำเร็จ");
+                                   } catch(err) { showToast("เพิ่มข้อมูลล้มเหลว"); }
+                                   setIsSaving(false);
+                                 }
+                               }}
+                             />
+                             <button 
+                               onClick={async () => {
+                                 if (newTypeInput.trim()) {
+                                   const val = newTypeInput.trim();
+                                   setIsSaving(true);
+                                   try {
+                                     const newMode = { id: `MODE-${Date.now()}`, name: val };
+                                     const newArr = [...appModes, newMode];
+                                     setAppModes(newArr);
+                                     await api.call('saveConfigItem', 'appModes', JSON.stringify(newArr));
+                                     setNewTypeInput(''); showToast("เพิ่มปุ่มโหมดสำเร็จ");
+                                   } catch(err) { showToast("เพิ่มข้อมูลล้มเหลว"); }
+                                   setIsSaving(false);
+                                 }
+                               }}
+                               disabled={isSaving || !newTypeInput.trim()}
+                               className="bg-blue-600 text-white px-6 py-3.5 rounded-xl hover:bg-blue-700 disabled:opacity-50 transition-colors flex items-center justify-center shadow-sm shrink-0 w-full sm:w-auto font-bold text-base active:scale-95"
+                             >
+                               <PlusCircle size={20} /> <span className="ml-2">เพิ่มใหม่</span>
+                             </button>
+                           </div>
+
+                           <div className="bg-white rounded-2xl border border-gray-200 shadow-sm divide-y divide-gray-100 flex-grow overflow-y-auto min-h-[200px]">
+                             {appModes.map((mode, idx) => (
+                               <div key={mode.id} className="flex justify-between items-center px-4 sm:px-6 py-4 hover:bg-gray-50 transition-colors">
+                                 {editingMode?.id === mode.id ? (
+                                   <div className="flex flex-col sm:flex-row flex-1 items-center gap-2 mr-2 md:mr-4">
+                                     <input type="text" className="border border-blue-400 focus:ring-2 outline-none px-4 py-2.5 rounded-xl w-full text-base font-bold text-blue-800 bg-blue-50 shadow-sm" value={editingMode.name} onChange={e => setEditingMode({...editingMode, name: e.target.value})} autoFocus />
+                                     <div className="flex gap-2 w-full sm:w-auto shrink-0">
+                                       <button onClick={async () => {
+                                           if(!editingMode.name.trim()) return;
+                                           setIsSaving(true);
+                                           try {
+                                             const newArr = appModes.map(m => m.id === mode.id ? { ...m, name: editingMode.name.trim() } : m);
+                                             setAppModes(newArr);
+                                             await api.call('saveConfigItem', 'appModes', JSON.stringify(newArr));
+                                             setEditingMode(null);
+                                             showToast("แก้ไขชื่อโหมดสำเร็จ");
+                                           } catch(e) { showToast("แก้ไขล้มเหลว"); }
+                                           setIsSaving(false);
+                                       }} className="flex-1 sm:flex-none bg-green-500 hover:bg-green-600 text-white px-4 py-2.5 rounded-xl text-sm font-bold transition-colors active:scale-95 shrink-0 flex items-center justify-center gap-1"><Check size={18}/> บันทึก</button>
+                                       <button onClick={() => setEditingMode(null)} className="flex-1 sm:flex-none bg-gray-200 hover:bg-gray-300 text-gray-700 px-4 py-2.5 rounded-xl text-sm font-bold transition-colors active:scale-95 shrink-0 flex items-center justify-center"><X size={18}/></button>
+                                     </div>
+                                   </div>
+                                 ) : (
+                                   <>
+                                     <span className="text-gray-800 text-base font-bold truncate pr-4">{mode.name}</span>
+                                     <div className="flex gap-1.5 shrink-0">
+                                       <button onClick={() => setEditingMode({id: mode.id, name: mode.name})} className="text-blue-500 bg-blue-50 hover:bg-blue-100 px-3 py-2 rounded-lg font-bold text-xs sm:text-sm flex items-center gap-1 transition-colors active:scale-95"><Edit size={16}/> <span className="hidden sm:inline">แก้ไข</span></button>
+                                       {appModes.length > 1 && (
+                                         <button onClick={async () => {
+                                             // Check if projects exist under this mode
+                                             const modeProjs = projects.filter(p => p.projectType === mode.id || (mode.id === 'NORMAL' && !p.projectType));
+                                             if (modeProjs.length > 0) {
+                                                 showToast(`ลบไม่ได้! มี ${modeProjs.length} รายการที่กำลังใช้งานหมวดหมู่นี้อยู่`);
+                                                 return;
+                                             }
+                                             setIsSaving(true);
+                                             try {
+                                               const newArr = appModes.filter(m => m.id !== mode.id);
+                                               setAppModes(newArr);
+                                               await api.call('saveConfigItem', 'appModes', JSON.stringify(newArr));
+                                               if (appMode === mode.id) setAppMode(newArr[0].id);
+                                               showToast("ลบโหมดสำเร็จ");
+                                             } catch(e) { showToast("ลบล้มเหลว"); }
+                                             setIsSaving(false);
+                                         }} className="text-red-500 bg-red-50 hover:bg-red-100 px-3 py-2 rounded-lg font-bold text-xs sm:text-sm flex items-center gap-1 transition-colors active:scale-95"><Trash2 size={16}/> <span className="hidden sm:inline">ลบ</span></button>
+                                       )}
+                                     </div>
+                                   </>
+                                 )}
+                               </div>
+                             ))}
+                           </div>
+                         </>
+                       ) : (
+                         <>
+                           <div className="flex flex-col sm:flex-row gap-3 mb-5 bg-gray-50 p-4 sm:p-5 rounded-2xl border border-gray-200">
+                             <input type="text" placeholder="พิมพ์ชื่อประเภทที่ต้องการเพิ่ม... (กด Enter)" className="flex-grow px-5 py-3.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 text-base outline-none" value={newTypeInput} onChange={(e) => setNewTypeInput(e.target.value)}
+                               onKeyDown={async (e) => {
+                                 if (e.key === 'Enter' && newTypeInput.trim()) {
+                                   const val = newTypeInput.trim();
+                                   setIsSaving(true);
+                                   try {
+                                     let newArr;
+                                     if (settingsModal.typeTab === 'money') {
+                                       newArr = [...moneyTypes, val]; setMoneyTypes(newArr);
+                                       await api.call('saveConfigItem', 'moneyTypes', JSON.stringify(newArr));
+                                     } else if (settingsModal.typeTab === 'expense') {
+                                       newArr = [...expenseTypes, val]; setExpenseTypes(newArr);
+                                       await api.call('saveConfigItem', 'expenseTypes', JSON.stringify(newArr));
+                                     } else if (settingsModal.typeTab === 'status') {
+                                       newArr = [...statusTypes, val]; setStatusTypes(newArr);
+                                       await api.call('saveConfigItem', 'statusTypes', JSON.stringify(newArr));
+                                     }
+                                     setNewTypeInput(''); showToast("เพิ่มข้อมูลสำเร็จ");
+                                   } catch(err) { showToast("อัปเดตล้มเหลว"); }
+                                   setIsSaving(false);
+                                 }
+                               }}
+                             />
+                             <button 
+                               onClick={async () => {
+                                 if (newTypeInput.trim()) {
+                                   const val = newTypeInput.trim();
+                                   setIsSaving(true);
+                                   try {
+                                     let newArr;
+                                     if (settingsModal.typeTab === 'money') {
+                                       newArr = [...moneyTypes, val]; setMoneyTypes(newArr);
+                                       await api.call('saveConfigItem', 'moneyTypes', JSON.stringify(newArr));
+                                     } else if (settingsModal.typeTab === 'expense') {
+                                       newArr = [...expenseTypes, val]; setExpenseTypes(newArr);
+                                       await api.call('saveConfigItem', 'expenseTypes', JSON.stringify(newArr));
+                                     } else if (settingsModal.typeTab === 'status') {
+                                       newArr = [...statusTypes, val]; setStatusTypes(newArr);
+                                       await api.call('saveConfigItem', 'statusTypes', JSON.stringify(newArr));
+                                     }
+                                     setNewTypeInput(''); showToast("เพิ่มข้อมูลสำเร็จ");
+                                   } catch(err) { showToast("อัปเดตล้มเหลว"); }
+                                   setIsSaving(false);
+                                 }
+                               }}
+                               disabled={isSaving || !newTypeInput.trim()}
+                               className="bg-blue-600 text-white px-6 py-3.5 rounded-xl hover:bg-blue-700 disabled:opacity-50 transition-colors flex items-center justify-center shadow-sm shrink-0 w-full sm:w-auto font-bold text-base active:scale-95"
+                             >
+                               <PlusCircle size={20} /> <span className="ml-2">เพิ่มใหม่</span>
+                             </button>
+                           </div>
+                           
+                           <div className="bg-white rounded-2xl border border-gray-200 shadow-sm divide-y divide-gray-100 flex-grow overflow-y-auto min-h-[200px]">
+                             {(settingsModal.typeTab === 'money' ? moneyTypes : settingsModal.typeTab === 'expense' ? expenseTypes : statusTypes).map((type, idx) => (
+                               <div key={idx} className="flex justify-between items-center px-6 py-4 hover:bg-gray-50 transition-colors">
+                                 <span className="text-gray-800 text-base font-bold">{type}</span>
+                                 <button onClick={async () => {
+                                     setIsSaving(true);
+                                     try {
+                                       let newArr;
+                                       if (settingsModal.typeTab === 'money') {
+                                         newArr = moneyTypes.filter(t => t !== type); setMoneyTypes(newArr);
+                                         await api.call('saveConfigItem', 'moneyTypes', JSON.stringify(newArr));
+                                       } else if (settingsModal.typeTab === 'expense') {
+                                         newArr = expenseTypes.filter(t => t !== type); setExpenseTypes(newArr);
+                                         await api.call('saveConfigItem', 'expenseTypes', JSON.stringify(newArr));
+                                       } else if (settingsModal.typeTab === 'status') {
+                                         newArr = statusTypes.filter(t => t !== type); setStatusTypes(newArr);
+                                         await api.call('saveConfigItem', 'statusTypes', JSON.stringify(newArr));
+                                       }
+                                       showToast("ลบข้อมูลสำเร็จ");
+                                     } catch(e) { showToast("ลบไม่สำเร็จ"); }
+                                     setIsSaving(false);
+                                   }}
+                                   className="text-red-500 bg-red-50 hover:bg-red-100 hover:text-red-700 px-4 py-2.5 rounded-xl transition-colors disabled:opacity-50 flex items-center gap-1.5 text-sm font-bold active:scale-95" title="ลบ"><Trash2 size={18} /> <span className="hidden sm:inline">ลบ</span></button>
+                               </div>
+                             ))}
+                             {(settingsModal.typeTab === 'money' ? moneyTypes : settingsModal.typeTab === 'expense' ? expenseTypes : statusTypes).length === 0 && (
+                               <div className="p-10 text-center text-gray-400 text-base font-bold">ยังไม่มีข้อมูลในหมวดหมู่นี้</div>
+                             )}
+                           </div>
+                         </>
+                       )}
+                    </div>
+                  )}
+
+                  {settingsModal.activeTab === 'security' && (
+                    <div className="space-y-6 animate-in fade-in">
+                      <div className="bg-yellow-50 p-6 border border-yellow-200 rounded-2xl text-sm md:text-base text-yellow-800 flex flex-col md:flex-row gap-4 md:gap-5 items-start">
+                        <ShieldAlert size={32} className="shrink-0 text-yellow-600 mt-1" />
+                        <div>
+                          <strong className="text-lg block mb-2">การจัดการความปลอดภัย</strong>
+                          <p className="leading-relaxed font-medium">การเปลี่ยนรหัสผ่านจะมีผลทันที กรุณาจดจำรหัสผ่านใหม่ให้ดี หากลืมรหัสผ่านยังคงสามารถใช้รหัส <strong className="text-red-600">"admin999"</strong> เป็นรหัสผ่านสำรองในการเข้าสู่ระบบได้เสมอ</p>
+                        </div>
+                      </div>
+                      <div className="bg-gray-50 p-6 rounded-2xl border border-gray-200">
+                        <label className="block text-gray-800 text-base font-bold mb-3">ตั้งรหัสผ่านใหม่สำหรับผู้ดูแลระบบ (Admin)</label>
+                        <input 
+                          type="text" 
+                          className="w-full max-w-md px-5 py-3.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 font-bold text-lg tracking-widest" 
+                          placeholder="กรอกรหัสผ่านใหม่..."
+                          value={settingsModal.password} 
+                          onChange={e => setSettingsModal({...settingsModal, password: e.target.value})} 
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                </div>
+
+                <div className="bg-gray-50 p-5 border-t border-gray-200 shrink-0">
+                  <div className="flex flex-col-reverse sm:flex-row justify-end gap-3">
+                    <button onClick={() => { setSettingsModal({...settingsModal, isOpen: false}); setEditingMode(null); }} className="w-full sm:w-auto px-6 py-4 sm:py-3.5 bg-white border border-gray-300 text-gray-700 rounded-2xl md:rounded-xl hover:bg-gray-100 font-bold transition-colors active:scale-95 text-base">ปิดหน้าต่าง</button>
+                    {(settingsModal.activeTab === 'project-edit' || settingsModal.activeTab === 'general' || settingsModal.activeTab === 'security') && (
+                      <button 
+                        onClick={async () => { 
+                          setIsSaving(true);
+                          try {
+                            if (settingsModal.activeTab === 'project-edit') {
+                              const oldProjectName = activeProject.projectName;
+                              const newData = settingsModal.editProjectData;
+                              const currentProjectId = activeProject.id;
+                              
+                              // 1. อัปเดตข้อมูลโครงการใน Config
+                              const updatedProjects = projects.map(p => p.id === currentProjectId ? newData : p);
+                              await api.call('saveConfigItem', 'projects', JSON.stringify(updatedProjects));
+                              setProjects(updatedProjects);
+
+                              // 2. อัปเดตข้อมูล กิจกรรม และ รายจ่าย ทั้งหมดที่ผูกกับโครงการนี้ ให้เป็นข้อมูลใหม่
+                              const updatePromises = [];
+                              let actsUpdatedCount = 0;
+                              let expsUpdatedCount = 0;
+                              
+                              const updatedActivities = allActivities.map(act => {
+                                // เช็คว่ากิจกรรมนี้ผูกกับโครงการที่กำลังแก้ไขหรือไม่
+                                // (รองรับกรณีเก็บเป็นชื่อโครงการเก่า, ID โครงการ, หรือ 'default' ถ้ากำลังแก้ default)
+                                const isBelongToProject = act.projectId === oldProjectName || act.projectId === currentProjectId || (act.projectId === 'default' && currentProjectId === 'default');
+                                
+                                if (isBelongToProject) {
+                                  // ถ้าข้อมูลใดข้อมูลหนึ่งเปลี่ยน ให้สร้าง object ใหม่เพื่ออัปเดต
+                                  if (act.projectId !== newData.projectName || act.projectResponsible !== newData.responsible || act.managementGroup !== newData.managementGroup || act.plan !== newData.plan) {
+                                    const updatedAct = { 
+                                      ...act, 
+                                      projectId: newData.projectName, // อัปเดตชื่อโครงการ
+                                      projectResponsible: newData.responsible, // อัปเดตผู้รับผิดชอบ
+                                      managementGroup: newData.managementGroup, // อัปเดตกลุ่มบริหาร
+                                      plan: newData.plan // อัปเดตแผนงาน
+                                    };
+                                    updatePromises.push(api.call('saveActivity', JSON.stringify(updatedAct)));
+                                    actsUpdatedCount++;
+                                    return updatedAct;
+                                  }
+                                }
+                                return act;
+                              });
+                              
+                              const updatedExpenses = allExpenses.map(exp => {
+                                const isBelongToProject = exp.projectId === oldProjectName || exp.projectId === currentProjectId || (exp.projectId === 'default' && currentProjectId === 'default');
+                                
+                                if (isBelongToProject) {
+                                  if (exp.projectId !== newData.projectName || exp.projectResponsible !== newData.responsible || exp.managementGroup !== newData.managementGroup || exp.plan !== newData.plan) {
+                                    const updatedExp = { 
+                                      ...exp, 
+                                      projectId: newData.projectName,
+                                      projectResponsible: newData.responsible,
+                                      managementGroup: newData.managementGroup,
+                                      plan: newData.plan
+                                    };
+                                    updatePromises.push(api.call('saveExpense', JSON.stringify(updatedExp)));
+                                    expsUpdatedCount++;
+                                    return updatedExp;
+                                  }
+                                }
+                                return exp;
+                              });
+                              
+                              // ถ้ารายการใดถูกปรับแก้ ให้รอจนกว่าจะบันทึกลงชีทเสร็จทั้งหมด
+                              if (updatePromises.length > 0) {
+                                await Promise.all(updatePromises);
+                                setAllActivities(updatedActivities);
+                                setAllExpenses(updatedExpenses);
+                                console.log(`อัปเดตข้อมูลโครงการไปยัง กิจกรรม: ${actsUpdatedCount} รายการ, รายจ่าย: ${expsUpdatedCount} รายการ`);
+                              }
+                            }
+                            if (settingsModal.activeTab === 'general') {
+                              await api.call('saveConfigItem', 'themeColors', JSON.stringify(settingsModal.colors));
+                              setThemeColors(settingsModal.colors);
+                              await api.call('saveConfigItem', 'schoolName', settingsModal.schoolName);
+                              setSchoolName(settingsModal.schoolName);
+                            }
+                            if (settingsModal.activeTab === 'security' && settingsModal.password && settingsModal.password !== adminPassword) {
+                              await api.call('saveConfigItem', 'adminPassword', settingsModal.password);
+                              setAdminPassword(settingsModal.password);
+                            }
+                            setSettingsModal({...settingsModal, isOpen: false});
+                            showToast("บันทึกการตั้งค่าระบบสำเร็จ");
+                          } catch(e) { showToast("บันทึกไม่สำเร็จ"); }
+                          setIsSaving(false);
+                        }} 
+                        className="w-full sm:w-auto px-6 py-4 sm:py-3.5 bg-blue-600 text-white rounded-2xl md:rounded-xl hover:bg-blue-700 font-bold shadow-md flex justify-center items-center gap-2 transition-colors active:scale-95 text-base"
+                      >
+                        <Check size={20} /> บันทึกการเปลี่ยนแปลง
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+              </div>
+            </div>
+          )}
+
+        </div>
+      );
+    }
+
+    const root = createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
