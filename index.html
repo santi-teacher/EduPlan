@@ -65,7 +65,7 @@
   <div id="root"></div>
 
   <script type="text/babel" data-type="module">
-    import React, { useState, useEffect } from 'https://esm.sh/react@18.2.0';
+    import React, { useState, useEffect, useRef } from 'https://esm.sh/react@18.2.0';
     import { createRoot } from 'https://esm.sh/react-dom@18.2.0/client';
     import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, LabelList } from 'https://esm.sh/recharts@2.12.0?deps=react@18.2.0,react-dom@18.2.0';
     import { Wallet, FileText, CheckCircle, AlertCircle, PlusCircle, LayoutDashboard, ListOrdered, Edit, Trash2, Check, X, Lock, Unlock, KeyRound, PieChart as PieChartIcon, Settings, Tags, Loader2, Menu, RefreshCcw, TrendingUp, Download, Printer, ImageOff, ShieldAlert, FolderPlus, FolderOpen, BarChart3, Home, ChevronRight } from 'https://esm.sh/lucide-react@0.344.0?deps=react@18.2.0';
@@ -75,38 +75,67 @@
     // ====================================================
     // นำ Web App URL ที่ได้จาก Google Apps Script มาใส่ที่นี่
     // ====================================================
-    const GAS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbynj3tV-SjuwQMItvDR-XKp4o1XQDLPF5PtkH4Y7Xu8tCpkguQj_i1Typ9KefiBSlQ/exec'; 
+    const GAS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbynj3tV-SjuwQMItvDR-XKp4o1XQDLPF5PtkH4Y7Xu8tCpkguQj_i1Typ9KefiBSlQ/exec'; // <--- แทนที่ข้อความนี้ด้วย URL ของคุณ
     
     const api = {
-      call: async (functionName, ...args) => {
-        try {
-          const response = await fetch(GAS_WEB_APP_URL, {
-            method: 'POST',
-            // ใช้ text/plain เพื่อหลีกเลี่ยงปัญหา CORS Preflight (OPTIONS request) บนฝั่งเบราว์เซอร์
-            headers: {
-              'Content-Type': 'text/plain;charset=utf-8', 
-            },
-            body: JSON.stringify({ func: functionName, args: args })
-          });
-          
-          if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
+      call: (functionName, ...args) => {
+        return new Promise((resolve, reject) => {
+          if (typeof google !== 'undefined' && google.script && google.script.run) {
+            google.script.run
+              .withSuccessHandler(resolve)
+              .withFailureHandler(reject)
+              [functionName](...args);
+          } else {
+            console.warn(`[Local Mock] Called GAS function: ${functionName}`, args);
+            setTimeout(() => {
+              if (functionName === 'getInitialData') {
+                resolve(JSON.stringify({ 
+                  activities: [
+                    { id: 1, name: 'กิจกรรมเปิดบ้าน', allocatedBudget: 50000, moneyType: 'เงินอุดหนุน ค่ากิจกรรมพัฒนาฯ', responsible: 'นายสมชาย', status: 'กำลังดำเนินการ', projectId: 'default', projectResponsible: 'ระบุชื่อ', managementGroup: 'บริหารวิชาการ', plan: 'ระบุแผนงาน' },
+                    { id: 2, name: 'ปรับปรุงห้องสมุด', allocatedBudget: 120000, moneyType: 'เงินอุดหนุน ค่าจัดการเรียนการสอน', responsible: 'นางสมศรี', status: 'ยังไม่เริ่มต้น', projectId: 'default', projectResponsible: 'ระบุชื่อ', managementGroup: 'บริหารวิชาการ', plan: 'ระบุแผนงาน' },
+                    { id: 3, name: 'ค่าน้ำประปา', allocatedBudget: 50000, moneyType: 'รายได้สถานศึกษา', responsible: 'การเงิน', status: 'กำลังดำเนินการ', projectId: 'reg1', projectResponsible: 'การเงิน', managementGroup: 'บริหารงบประมาณ', plan: 'รายจ่ายประจำ' }
+                  ], 
+                  expenses: [
+                    { id: 101, activityId: 1, activityName: 'กิจกรรมเปิดบ้าน', date: '2026-04-05', type: 'จัดซื้อ', details: 'ค่าวัสดุอุปกรณ์', amount: 15000, projectId: 'default', projectResponsible: 'ระบุชื่อ', managementGroup: 'บริหารวิชาการ', plan: 'ระบุแผนงาน' },
+                    { id: 102, activityId: 3, activityName: 'ค่าน้ำประปา', date: '2026-04-10', type: 'จัดซื้อ', details: 'บิลเดือนเมษา', amount: 4500, projectId: 'reg1', projectResponsible: 'การเงิน', managementGroup: 'บริหารงบประมาณ', plan: 'รายจ่ายประจำ' }
+                  ], 
+                  config: {
+                    adminPassword: 'admin',
+                    schoolName: '',
+                    appModes: [
+                      { id: 'NORMAL', name: 'แผนงาน/โครงการ' },
+                      { id: 'REGULAR', name: 'รายจ่ายประจำ' }
+                    ],
+                    moneyTypes: ['เงินอุดหนุน ค่าจัดการเรียนการสอน', 'เงินอุดหนุน ค่ากิจกรรมพัฒนาฯ', 'รายได้สถานศึกษา', 'สอร.', 'ลูกเสือ'],
+                    expenseTypes: ['จัดซื้อ', 'จัดจ้าง', 'อื่นๆ', 'โยกเงิน'],
+                    statusTypes: ['ยังไม่เริ่มต้น', 'อยู่ระหว่างดำเนินการ', 'กำลังดำเนินการ', 'ดำเนินการสำเร็จ'],
+                    projects: [
+                      { id: 'default', projectName: '(2569) โครงการตัวอย่าง', managementGroup: 'บริหารวิชาการ', responsible: 'ระบุชื่อ', plan: 'ระบุแผนงาน', strategy: 'ระบุกลยุทธ์', logoUrl: '', projectType: 'NORMAL' },
+                      { id: 'reg1', projectName: 'ค่าสาธารณูปโภค', managementGroup: 'บริหารงบประมาณ', responsible: 'การเงิน', plan: 'รายจ่ายประจำ', strategy: '-', logoUrl: '', projectType: 'REGULAR' }
+                    ]
+                  } 
+                }));
+              } else {
+                resolve(true);
+              }
+            }, 500);
           }
-          
-          const result = await response.json();
-          if (result.error) {
-            throw new Error(result.error);
-          }
-          // คืนค่า data ที่ได้กลับมาจากฝั่ง Google Apps Script
-          return result.data;
-        } catch (error) {
-          console.error(`[API Error] Failed to call ${functionName}:`, error);
-          throw error;
-        }
+        });
       }
     };
 
-    function App() {
+    // ทำให้ component ที่ประกาศใน App มี identity คงที่ (ไม่ถูก remount ทุกครั้งที่ App re-render)
+function useStableView(renderFn) {
+  const fnRef = useRef(renderFn);
+  fnRef.current = renderFn; // ใช้ฟังก์ชัน/ข้อมูลล่าสุดเสมอ
+  const compRef = useRef(null);
+  if (!compRef.current) {
+    compRef.current = function StableView(props) { return fnRef.current(props); };
+  }
+  return compRef.current;
+}
+
+function App() {
       const [isInitializing, setIsInitializing] = useState(true);
       const [isSaving, setIsSaving] = useState(false);
       const [isSidebarOpen, setIsSidebarOpen] = useState(true);
@@ -196,11 +225,15 @@
       }, [toastMessage]);
 
       useEffect(() => {
+        let wasDesktop = window.innerWidth >= 1024;
+        setIsSidebarOpen(wasDesktop);
         const handleResize = () => {
-          if (window.innerWidth < 1024) { setIsSidebarOpen(false); } 
-          else { setIsSidebarOpen(true); }
+          const isDesktop = window.innerWidth >= 1024;
+          if (isDesktop !== wasDesktop) { // เปลี่ยนเฉพาะตอนข้าม breakpoint
+            wasDesktop = isDesktop;
+            setIsSidebarOpen(isDesktop);
+          }
         };
-        handleResize();
         window.addEventListener('resize', handleResize);
         return () => window.removeEventListener('resize', handleResize);
       }, []);
@@ -291,7 +324,7 @@
         }
       };
 
-      const AppLogo = ({ className, size = 24 }) => {
+      const AppLogo = useStableView(({ className, size = 24 }) => {
         if (activeProject && activeProject.logoUrl) {
           return (
             <img 
@@ -304,10 +337,10 @@
           );
         }
         return <Wallet size={size} className={`shrink-0 ${className}`} />;
-      };
+      });
 
       // Component สำหรับแสดงหน้าเมื่อไม่มีโครงการในโหมดนั้น
-      const EmptyStateView = () => (
+      const EmptyStateView = useStableView(() => (
         <div className="flex flex-col items-center justify-center py-20 px-4 text-center bg-white rounded-2xl border border-gray-100 shadow-sm mt-4 animate-in fade-in">
           <FolderPlus size={64} className="text-gray-300 mb-4" />
           <h2 className="text-xl md:text-2xl font-bold text-gray-700 mb-2">ยังไม่มีข้อมูลในหมวด {currentModeName}</h2>
@@ -334,12 +367,12 @@
             </div>
           )}
         </div>
-      );
+      ));
 
       // ==========================================
       // VIEW 0: Global Dashboard
       // ==========================================
-      const GlobalDashboardView = () => {
+      const GlobalDashboardView = useStableView(() => {
         const totalProjects = currentModeProjects.length;
         const globalIncome = modeActivities.reduce((sum, a) => sum + Number(a.allocatedBudget), 0);
         const globalExpense = modeExpenses.reduce((sum, e) => sum + Number(e.amount), 0);
@@ -568,12 +601,12 @@
             )}
           </div>
         );
-      };
+      });
 
       // ==========================================
       // VIEW 1: Ledger (บันทึก)
       // ==========================================
-      const LedgerView = () => {
+      const LedgerView = useStableView(() => {
         const [newAct, setNewAct] = useState({ name: '', allocatedBudget: '', moneyType: moneyTypes[0] || '', responsible: '', status: statusTypes[0] || 'ยังไม่เริ่มต้น' });
         const initialActName = uniqueActivityNames[0] || '';
         const initialMoneyTypes = activities.filter(a => a.name === initialActName).map(a => a.moneyType);
@@ -587,6 +620,28 @@
         const [editActForm, setEditActForm] = useState({});
         const [editingExpId, setEditingExpId] = useState(null);
         const [editExpForm, setEditExpForm] = useState({});
+
+        const actKey = activities.map(a => a.id + ':' + a.name + ':' + a.moneyType).join('|');
+
+        useEffect(() => {
+          setNewExp(prev => {
+            const name = uniqueActivityNames.includes(prev.activityName) ? prev.activityName : (uniqueActivityNames[0] || '');
+            const types = activities.filter(a => a.name === name).map(a => a.moneyType);
+            const mt = types.includes(prev.moneyType) ? prev.moneyType : (types[0] || '');
+            const tp = expenseTypes.includes(prev.type) ? prev.type : (expenseTypes[0] || '');
+            if (name === prev.activityName && mt === prev.moneyType && tp === prev.type) return prev;
+            return { ...prev, activityName: name, moneyType: mt, type: tp };
+          });
+        }, [actKey, selectedProjectId, expenseTypes.join('|')]);
+
+        useEffect(() => {
+          setNewAct(prev => {
+            const mt = moneyTypes.includes(prev.moneyType) ? prev.moneyType : (moneyTypes[0] || '');
+            const st = statusTypes.includes(prev.status) ? prev.status : (statusTypes[0] || 'ยังไม่เริ่มต้น');
+            if (mt === prev.moneyType && st === prev.status) return prev;
+            return { ...prev, moneyType: mt, status: st };
+          });
+        }, [moneyTypes.join('|'), statusTypes.join('|')]);
 
         const totalIncome = activities.reduce((sum, a) => sum + Number(a.allocatedBudget), 0);
         const totalExpense = expenses.reduce((sum, e) => sum + Number(e.amount), 0);
@@ -1098,15 +1153,22 @@
             </div>
           </div>
         );
-      };
+      });
 
       // ==========================================
       // VIEW 2: Summary
       // ==========================================
-      const SummaryView = () => {
+      const SummaryView = useStableView(() => {
         const [selectedActName, setSelectedActName] = useState(uniqueActivityNames[0] || '');
         const [selectedMoneyType, setSelectedMoneyType] = useState('ALL'); 
         const [isExporting, setIsExporting] = useState(false);
+
+        useEffect(() => {
+          if (!uniqueActivityNames.includes(selectedActName)) {
+            setSelectedActName(uniqueActivityNames[0] || '');
+            setSelectedMoneyType('ALL');
+          }
+        }, [uniqueActivityNames.join('|')]);
 
         const fixThai = (str) => {
           if (!str) return str;
@@ -1365,12 +1427,12 @@
             </div>
           </div>
         );
-      };
+      });
 
       // ==========================================
       // VIEW 3: Overview by Type
       // ==========================================
-      const OverviewByTypeView = () => {
+      const OverviewByTypeView = useStableView(() => {
         const displayMoneyTypes = [...new Set([...moneyTypes, ...activities.map(a => a.moneyType)])];
         const overviewData = displayMoneyTypes.map(type => {
           const typeActivities = activities.filter(a => a.moneyType === type);
@@ -1542,7 +1604,7 @@
             </div>
           </div>
         );
-      };
+      });
 
       return (
         <div className="flex min-h-screen bg-gray-50 font-sans text-sm relative print:bg-white print:min-h-0 print:pb-0">
