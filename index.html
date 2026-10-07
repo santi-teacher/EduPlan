@@ -4,6 +4,11 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>EduPlan System</title>
+  <link rel="preconnect" href="https://esm.sh" crossorigin>
+  <link rel="preconnect" href="https://script.google.com">
+  <link rel="preconnect" href="https://script.googleusercontent.com">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -90,17 +95,26 @@ button, select, input, textarea, a { touch-action: manipulation; }
     const GAS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbynj3tV-SjuwQMItvDR-XKp4o1XQDLPF5PtkH4Y7Xu8tCpkguQj_i1Typ9KefiBSlQ/exec'; // <--- แทนที่ข้อความนี้ด้วย URL ของคุณ
     
     let ADMIN_TOKEN = '';
+    let PENDING_SAVES = 0;
+    const WRITE_CALLS = ['saveActivity', 'deleteActivity', 'deleteActivities', 'saveExpense', 'deleteExpense', 'saveBatch', 'saveConfigItem'];
+    window.addEventListener('beforeunload', (e) => { if (PENDING_SAVES > 0) { e.preventDefault(); e.returnValue = ''; } });
     const api = {
       call: async (functionName, ...args) => {
         if (!GAS_WEB_APP_URL) return apiMock.call(functionName, ...args);
-        const res = await fetch(GAS_WEB_APP_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify({ func: functionName, args, password: ADMIN_TOKEN })
-        });
-        const json = await res.json();
-        if (json.error) throw new Error(json.error);
-        return json.data;
+        const isWrite = WRITE_CALLS.includes(functionName);
+        if (isWrite) PENDING_SAVES++;
+        try {
+          const res = await fetch(GAS_WEB_APP_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify({ func: functionName, args, password: ADMIN_TOKEN })
+          });
+          const json = await res.json();
+          if (json.error) throw new Error(json.error);
+          return json.data;
+        } finally {
+          if (isWrite) PENDING_SAVES--;
+        }
       }
     };
 
@@ -268,42 +282,60 @@ function App() {
       }, []);
 
       useEffect(() => {
-        const fetchData = async () => {
+        const CACHE_KEY = 'eduplan_cache_v1';
+        const applyData = (data) => {
+          setAllActivities(data.activities || []);
+          setAllExpenses(data.expenses || []);
+          if (data.config) {
+            if (data.config.appModes) setAppModes(data.config.appModes);
+            if (data.config.moneyTypes) setMoneyTypes(data.config.moneyTypes);
+            if (data.config.expenseTypes) setExpenseTypes(data.config.expenseTypes);
+            if (data.config.statusTypes) setStatusTypes(data.config.statusTypes);
+            if (data.config.themeColors) setThemeColors(data.config.themeColors);
+            if (data.config.schoolName !== undefined) setSchoolName(data.config.schoolName);
+            if (data.config.projects && data.config.projects.length > 0) {
+              setProjects(data.config.projects);
+            } else if (data.config.projectInfo) {
+              setProjects([{ id: 'default', ...data.config.projectInfo, managementGroup: '', projectType: 'NORMAL' }]);
+            } else {
+              setProjects([{ id: 'default', projectName: 'โครงการเริ่มต้น', managementGroup: '', responsible: '', plan: '', strategy: '', logoUrl: '', projectType: 'NORMAL' }]);
+            }
+          }
+        };
+
+        // 1) แสดงข้อมูลที่จำไว้ก่อนทันที
+        let cached = null;
+        try { cached = JSON.parse(localStorage.getItem(CACHE_KEY) || 'null'); } catch (e) {}
+        if (cached && cached.config) {
+          try { applyData(cached); setIsInitializing(false); } catch (e) { cached = null; }
+        }
+
+        // 2) ดึงข้อมูลล่าสุดจากเซิร์ฟเวอร์ แล้วอัปเดตเงียบๆ
+        (async () => {
           try {
             const resultString = await api.call('getInitialData');
             const data = JSON.parse(resultString);
-            
-            if (data.activities && data.activities.length > 0) setAllActivities(data.activities);
-            if (data.expenses && data.expenses.length > 0) setAllExpenses(data.expenses);
-            
-            if (data.config) {
-              if (data.config.appModes) setAppModes(data.config.appModes);
-              if (data.config.moneyTypes) setMoneyTypes(data.config.moneyTypes);
-              if (data.config.expenseTypes) setExpenseTypes(data.config.expenseTypes);
-              if (data.config.statusTypes) setStatusTypes(data.config.statusTypes);
-              if (data.config.themeColors) setThemeColors(data.config.themeColors);
-              if (data.config.adminPassword) setAdminPassword(data.config.adminPassword);
-              if (data.config.schoolName !== undefined) setSchoolName(data.config.schoolName);
-              
-              if (data.config.projects && data.config.projects.length > 0) {
-                setProjects(data.config.projects);
-              } else if (data.config.projectInfo) {
-                const defaultProj = { id: 'default', ...data.config.projectInfo, managementGroup: '', projectType: 'NORMAL' };
-                setProjects([defaultProj]);
-              } else {
-                const defaultProj = { id: 'default', projectName: 'โครงการเริ่มต้น', managementGroup: '', responsible: '', plan: '', strategy: '', logoUrl: '', projectType: 'NORMAL' };
-                setProjects([defaultProj]);
-              }
-            }
+            applyData(data);
+            try { localStorage.setItem(CACHE_KEY, resultString); } catch (e) {}
           } catch (error) {
             console.error("Error fetching data:", error);
-            showToast("ไม่สามารถดึงข้อมูลจากฐานข้อมูลได้ (โปรดตรวจสอบ URL ของ GAS)");
+            showToast(cached ? "เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ กำลังแสดงข้อมูลที่บันทึกไว้ล่าสุด" : "ไม่สามารถดึงข้อมูลจากฐานข้อมูลได้ (โปรดตรวจสอบ URL ของ GAS)");
           } finally {
             setIsInitializing(false);
           }
-        };
-        fetchData();
+        })();
       }, []);
+
+      // เก็บข้อมูลล่าสุดไว้ในเครื่อง ใช้แสดงทันทีตอนเปิดครั้งหน้า
+      useEffect(() => {
+        if (isInitializing || projects.length === 0) return;
+        try {
+          localStorage.setItem('eduplan_cache_v1', JSON.stringify({
+            activities: allActivities, expenses: allExpenses,
+            config: { appModes, moneyTypes, expenseTypes, statusTypes, themeColors, schoolName, projects }
+          }));
+        } catch (e) {}
+      }, [isInitializing, allActivities, allExpenses, appModes, moneyTypes, expenseTypes, statusTypes, themeColors, schoolName, projects]);
 
       const formatCurrency = (amount) => new Intl.NumberFormat('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount);
       const formatDate = (dateInput) => {
@@ -725,29 +757,37 @@ function App() {
 
         const handleAddActivity = async () => {
           if (!newAct.name || !newAct.allocatedBudget) { showToast("กรุณากรอกชื่อกิจกรรมและยอดเงิน"); return; }
-          setIsSaving(true);
-          const newId = new Date().getTime(); 
+          const newId = new Date().getTime();
           const actData = { ...newAct, id: newId, allocatedBudget: Number(newAct.allocatedBudget), projectId: activeProject.projectName, projectResponsible: activeProject.responsible, managementGroup: activeProject.managementGroup, plan: activeProject.plan };
+          const formBackup = newAct;
+          setAllActivities(prev => [...prev, actData]);
+          setNewAct({ name: '', allocatedBudget: '', moneyType: moneyTypes[0] || '', responsible: '', status: statusTypes[0] || 'ยังไม่เริ่มต้น' });
+          showToast("กำลังบันทึก...");
           try {
             await api.call('saveActivity', JSON.stringify(actData));
-            setAllActivities([...allActivities, actData]);
-            setNewAct({ name: '', allocatedBudget: '', moneyType: moneyTypes[0] || '', responsible: '', status: statusTypes[0] || 'ยังไม่เริ่มต้น' });
             showToast("เพิ่มกิจกรรมสำเร็จ");
-          } catch(e) { showToast("บันทึกข้อมูลล้มเหลว"); }
-          setIsSaving(false);
+          } catch (e) {
+            setAllActivities(prev => prev.filter(a => a.id !== newId));
+            setNewAct(formBackup);
+            showToast("บันทึกข้อมูลล้มเหลว คืนค่าให้แล้ว กรุณาลองใหม่");
+          }
         };
 
         const startEditAct = (act) => { setEditingActId(act.id); setEditActForm({ ...act }); };
         const saveEditAct = async () => {
-          setIsSaving(true);
+          const editId = editingActId;
+          const oldAct = allActivities.find(a => a.id === editId);
           const updatedAct = { ...editActForm, allocatedBudget: Number(editActForm.allocatedBudget), projectId: activeProject.projectName, projectResponsible: activeProject.responsible, managementGroup: activeProject.managementGroup, plan: activeProject.plan };
+          setAllActivities(prev => prev.map(a => a.id === editId ? updatedAct : a));
+          setEditingActId(null);
+          showToast("กำลังบันทึก...");
           try {
             await api.call('saveActivity', JSON.stringify(updatedAct));
-            setAllActivities(allActivities.map(a => a.id === editingActId ? updatedAct : a));
-            setEditingActId(null);
             showToast("แก้ไขกิจกรรมสำเร็จ");
-          } catch(e) { showToast("บันทึกข้อมูลล้มเหลว"); }
-          setIsSaving(false);
+          } catch (e) {
+            if (oldAct) setAllActivities(prev => prev.map(a => a.id === editId ? oldAct : a));
+            showToast("บันทึกข้อมูลล้มเหลว คืนค่าเดิมให้แล้ว กรุณาลองใหม่");
+          }
         };
 
         const confirmDeleteAct = (id, name, moneyType) => {
@@ -755,15 +795,20 @@ function App() {
             isOpen: true, title: 'ยืนยันการลบงบประมาณ',
             message: `คุณต้องการลบ "${name}" ใช่หรือไม่? รายการเบิกจ่ายที่เกี่ยวข้องจะถูกลบด้วย`,
             onConfirm: async () => {
-              setIsSaving(true);
               setConfirmModal({ isOpen: false });
+              const removedActs = allActivities.filter(a => a.id === id);
+              const removedExps = allExpenses.filter(e => e.activityId === id);
+              setAllActivities(prev => prev.filter(a => a.id !== id));
+              setAllExpenses(prev => prev.filter(e => e.activityId !== id));
+              showToast("กำลังลบ...");
               try {
                 await api.call('deleteActivity', id);
-                setAllActivities(allActivities.filter(a => a.id !== id));
-                setAllExpenses(allExpenses.filter(e => e.activityId !== id));
                 showToast("ลบกิจกรรมสำเร็จ");
-              } catch(e) { showToast("ลบข้อมูลล้มเหลว"); }
-              setIsSaving(false);
+              } catch (e) {
+                setAllActivities(prev => [...prev, ...removedActs]);
+                setAllExpenses(prev => [...prev, ...removedExps]);
+                showToast("ลบข้อมูลล้มเหลว คืนข้อมูลให้แล้ว");
+              }
             }
           });
         };
@@ -771,19 +816,23 @@ function App() {
         const handleAddExpense = async () => {
           const targetAct = activities.find(a => a.name === newExp.activityName && a.moneyType === newExp.moneyType);
           if (!newExp.date || !newExp.type || !newExp.amount || !targetAct) { showToast("กรุณากรอกข้อมูลให้ครบและเลือกประเภทเงินให้ถูกต้อง"); return; }
-          setIsSaving(true);
           const newId = new Date().getTime();
           const expData = { 
             id: newId, activityName: targetAct.name, activityId: targetAct.id, date: newExp.date, 
             type: newExp.type, details: newExp.details, amount: Number(newExp.amount), moneyType: newExp.moneyType, projectId: activeProject.projectName, projectResponsible: activeProject.responsible, managementGroup: activeProject.managementGroup, plan: activeProject.plan
           };
+          const formBackup = newExp;
+          setAllExpenses(prev => [...prev, expData]);
+          setNewExp({ ...newExp, date: '', details: '', amount: '' });
+          showToast("กำลังบันทึก...");
           try {
             await api.call('saveExpense', JSON.stringify(expData));
-            setAllExpenses([...allExpenses, expData]);
-            setNewExp({ ...newExp, date: '', details: '', amount: '' });
             showToast("เพิ่มรายจ่ายสำเร็จ");
-          } catch(e) { showToast("บันทึกข้อมูลล้มเหลว"); }
-          setIsSaving(false);
+          } catch (e) {
+            setAllExpenses(prev => prev.filter(x => x.id !== newId));
+            setNewExp(formBackup);
+            showToast("บันทึกข้อมูลล้มเหลว คืนค่าให้แล้ว กรุณาลองใหม่");
+          }
         };
 
         const startEditExp = (exp) => { 
@@ -805,15 +854,19 @@ function App() {
         const saveEditExp = async () => {
           const targetAct = activities.find(a => a.name === editExpForm.activityName && a.moneyType === editExpForm.moneyType);
           if(!targetAct) { showToast("กรุณาเลือกประเภทเงินที่มีอยู่ในกิจกรรมนี้"); return; }
-          setIsSaving(true);
+          const editId = editingExpId;
+          const oldExp = allExpenses.find(e => e.id === editId);
           const updatedExp = { ...editExpForm, amount: Number(editExpForm.amount), activityId: targetAct.id, activityName: targetAct.name, projectId: activeProject.projectName, projectResponsible: activeProject.responsible, managementGroup: activeProject.managementGroup, plan: activeProject.plan };
+          setAllExpenses(prev => prev.map(e => e.id === editId ? updatedExp : e));
+          setEditingExpId(null);
+          showToast("กำลังบันทึก...");
           try {
             await api.call('saveExpense', JSON.stringify(updatedExp));
-            setAllExpenses(allExpenses.map(e => e.id === editingExpId ? updatedExp : e));
-            setEditingExpId(null);
             showToast("แก้ไขรายจ่ายสำเร็จ");
-          } catch(e) { showToast("บันทึกข้อมูลล้มเหลว"); }
-          setIsSaving(false);
+          } catch (e) {
+            if (oldExp) setAllExpenses(prev => prev.map(x => x.id === editId ? oldExp : x));
+            showToast("บันทึกข้อมูลล้มเหลว คืนค่าเดิมให้แล้ว กรุณาลองใหม่");
+          }
         };
         
         const confirmDeleteExp = (id, typeName, details) => {
@@ -821,14 +874,17 @@ function App() {
             isOpen: true, title: 'ยืนยันการลบรายการเบิกจ่าย',
             message: `คุณต้องการลบรายการ "${typeName}${details ? ' - ' + details : ''}" ใช่หรือไม่?`,
             onConfirm: async () => {
-              setIsSaving(true);
               setConfirmModal({ isOpen: false });
+              const removed = allExpenses.filter(e => e.id === id);
+              setAllExpenses(prev => prev.filter(e => e.id !== id));
+              showToast("กำลังลบ...");
               try {
                 await api.call('deleteExpense', id);
-                setAllExpenses(allExpenses.filter(e => e.id !== id));
                 showToast("ลบรายจ่ายสำเร็จ");
-              } catch(e) { showToast("ลบข้อมูลล้มเหลว"); }
-              setIsSaving(false);
+              } catch (e) {
+                setAllExpenses(prev => [...prev, ...removed]);
+                showToast("ลบข้อมูลล้มเหลว คืนข้อมูลให้แล้ว");
+              }
             }
           });
         };
@@ -2129,9 +2185,7 @@ function App() {
                                       const actsToDelete = allActivities.filter(a => a.projectId === activeProject.projectName || a.projectId === activeProject.id || (!a.projectId && activeProject.id === 'default'));
                                       
                                       // 2. ทยอยสั่งลบกิจกรรมทีละรายการ (backend จะทำการลบรายจ่ายที่เกี่ยวข้องให้อัตโนมัติ)
-                                      for (const act of actsToDelete) {
-                                        await api.call('deleteActivity', act.id);
-                                      }
+                                      if (actsToDelete.length > 0) { await api.call('deleteActivities', JSON.stringify(actsToDelete.map(a => a.id))); }
 
                                       // 3. อัปเดตลบรายชื่อโครงการออกจาก Config
                                       const updatedProjects = projects.filter(p => p.id !== activeProject.id);
@@ -2470,7 +2524,7 @@ function App() {
                               setProjects(updatedProjects);
 
                               // 2. อัปเดตข้อมูล กิจกรรม และ รายจ่าย ทั้งหมดที่ผูกกับโครงการนี้ ให้เป็นข้อมูลใหม่
-                              const updatePromises = [];
+                              const updatePromises = []; const batchActs = []; const batchExps = [];
                               let actsUpdatedCount = 0;
                               let expsUpdatedCount = 0;
                               
@@ -2489,7 +2543,7 @@ function App() {
                                       managementGroup: newData.managementGroup, // อัปเดตกลุ่มบริหาร
                                       plan: newData.plan // อัปเดตแผนงาน
                                     };
-                                    updatePromises.push(api.call('saveActivity', JSON.stringify(updatedAct)));
+                                    updatePromises.push(1); batchActs.push(updatedAct);
                                     actsUpdatedCount++;
                                     return updatedAct;
                                   }
@@ -2509,7 +2563,7 @@ function App() {
                                       managementGroup: newData.managementGroup,
                                       plan: newData.plan
                                     };
-                                    updatePromises.push(api.call('saveExpense', JSON.stringify(updatedExp)));
+                                    updatePromises.push(1); batchExps.push(updatedExp);
                                     expsUpdatedCount++;
                                     return updatedExp;
                                   }
@@ -2519,7 +2573,7 @@ function App() {
                               
                               // ถ้ารายการใดถูกปรับแก้ ให้รอจนกว่าจะบันทึกลงชีทเสร็จทั้งหมด
                               if (updatePromises.length > 0) {
-                                await Promise.all(updatePromises);
+                                await api.call('saveBatch', JSON.stringify(batchActs), JSON.stringify(batchExps));
                                 setAllActivities(updatedActivities);
                                 setAllExpenses(updatedExpenses);
                                 console.log(`อัปเดตข้อมูลโครงการไปยัง กิจกรรม: ${actsUpdatedCount} รายการ, รายจ่าย: ${expsUpdatedCount} รายการ`);
