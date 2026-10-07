@@ -77,7 +77,22 @@
     // ====================================================
     const GAS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbynj3tV-SjuwQMItvDR-XKp4o1XQDLPF5PtkH4Y7Xu8tCpkguQj_i1Typ9KefiBSlQ/exec'; // <--- แทนที่ข้อความนี้ด้วย URL ของคุณ
     
+    let ADMIN_TOKEN = '';
     const api = {
+      call: async (functionName, ...args) => {
+        if (!GAS_WEB_APP_URL) return apiMock.call(functionName, ...args);
+        const res = await fetch(GAS_WEB_APP_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({ func: functionName, args, password: ADMIN_TOKEN })
+        });
+        const json = await res.json();
+        if (json.error) throw new Error(json.error);
+        return json.data;
+      }
+    };
+
+    const apiMock = {
       call: (functionName, ...args) => {
         return new Promise((resolve, reject) => {
           if (typeof google !== 'undefined' && google.script && google.script.run) {
@@ -163,7 +178,7 @@ function App() {
       const [expenseTypes, setExpenseTypes] = useState([]);
       const [statusTypes, setStatusTypes] = useState([]);
       const [themeColors, setThemeColors] = useState({ primary: '#16a34a', chartExpense: '#ec4899', chartRemaining: '#10b981' });
-      const [adminPassword, setAdminPassword] = useState('admin999');
+      const [adminPassword, setAdminPassword] = useState('');
       const [schoolName, setSchoolName] = useState('');
 
       // 1. กรอง Project ตาม Mode ปัจจุบัน (รองรับความเข้ากันได้กับ ID เก่า)
@@ -223,6 +238,8 @@ function App() {
           return () => clearTimeout(timer);
         }
       }, [toastMessage]);
+
+      useEffect(() => { if (!isAdmin) ADMIN_TOKEN = ''; }, [isAdmin]);
 
       useEffect(() => {
         let wasDesktop = window.innerWidth >= 1024;
@@ -307,14 +324,23 @@ function App() {
         }
       };
 
-      const handleLogin = () => {
-        if (authModal.password === adminPassword || authModal.password === 'admin999') { 
-          setIsAdmin(true);
-          setAuthModal({ isOpen: false, password: '', error: '' });
-          showToast("เข้าสู่ระบบผู้ดูแลสำเร็จ");
-        } else {
-          setAuthModal({ ...authModal, error: 'รหัสผ่านไม่ถูกต้อง กรุณาลองใหม่อีกครั้ง' });
+      const handleLogin = async () => {
+        setIsSaving(true);
+        try {
+          const ok = await api.call('verifyAdmin', authModal.password);
+          if (ok === true) {
+            ADMIN_TOKEN = authModal.password;
+            setAdminPassword(authModal.password);
+            setIsAdmin(true);
+            setAuthModal({ isOpen: false, password: '', error: '' });
+            showToast("เข้าสู่ระบบผู้ดูแลสำเร็จ");
+          } else {
+            setAuthModal({ ...authModal, error: 'รหัสผ่านไม่ถูกต้อง กรุณาลองใหม่อีกครั้ง' });
+          }
+        } catch (e) {
+          setAuthModal({ ...authModal, error: 'เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ กรุณาลองใหม่' });
         }
+        setIsSaving(false);
       };
 
       const handleSidebarMenuClick = (tabId) => {
@@ -2376,7 +2402,7 @@ function App() {
                         <ShieldAlert size={32} className="shrink-0 text-yellow-600 mt-1" />
                         <div>
                           <strong className="text-lg block mb-2">การจัดการความปลอดภัย</strong>
-                          <p className="leading-relaxed font-medium">การเปลี่ยนรหัสผ่านจะมีผลทันที กรุณาจดจำรหัสผ่านใหม่ให้ดี หากลืมรหัสผ่านยังคงสามารถใช้รหัส <strong className="text-red-600">"admin999"</strong> เป็นรหัสผ่านสำรองในการเข้าสู่ระบบได้เสมอ</p>
+                          <p className="leading-relaxed font-medium">การเปลี่ยนรหัสผ่านจะมีผลทันที กรุณาจดจำรหัสผ่านใหม่ให้ดี หากลืมรหัสผ่าน ให้ตั้งค่า ADMIN_PASSWORD ใน Script properties ของ Apps Script เพื่อใช้เป็นรหัสกู้คืน</p>
                         </div>
                       </div>
                       <div className="bg-gray-50 p-6 rounded-2xl border border-gray-200">
@@ -2476,7 +2502,7 @@ function App() {
                             }
                             if (settingsModal.activeTab === 'security' && settingsModal.password && settingsModal.password !== adminPassword) {
                               await api.call('saveConfigItem', 'adminPassword', settingsModal.password);
-                              setAdminPassword(settingsModal.password);
+                              setAdminPassword(settingsModal.password); ADMIN_TOKEN = settingsModal.password;
                             }
                             setSettingsModal({...settingsModal, isOpen: false});
                             showToast("บันทึกการตั้งค่าระบบสำเร็จ");
